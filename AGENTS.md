@@ -83,9 +83,11 @@ MSYS_NO_PATHCONV=1 docker run --rm \
 
 ### Releasing
 
-`git tag vX.Y.Z && git push origin vX.Y.Z`. The tag is the only version: the
-release workflow stamps it into the `manifest.json` inside
-`jellyfin_control.zip`, which HACS installs (`zip_release`). The repository's
+`git tag vX.Y.Z && git push origin vX.Y.Z` on a commit of `main`. The release
+workflow first waits for the required checks of that commit (and refuses a
+tag off `main` or a red commit), then stamps the tag, the only version, into
+the `manifest.json` inside `jellyfin_control.zip`, which HACS installs
+(`zip_release`), and checks the zip. The repository's
 `manifest.json` and `pyproject.toml` stay at `0.0.0` on purpose; do not bump
 them.
 
