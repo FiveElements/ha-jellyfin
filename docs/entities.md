@@ -8,6 +8,7 @@ For each Jellyfin app (device) seen by the server:
 | `remote.<device>_remote` | Navigation and playback commands (only for apps that accept remote control). It cannot power the app on or off: `turn_on`/`turn_off` are refused. |
 | `select.<device>_audio_track` | Audio track of the playing item. |
 | `select.<device>_subtitles` | Subtitles of the playing item, with `off`. |
+| `sensor.<device>_last_played` | Title of the last item the app played, kept after it stops, disconnects or Home Assistant restarts. Attributes: `media_content_id` (to play it again), `media_content_type`, `played_at` (when the play started), and when known `name`, `series`, `series_id`, `season`, `episode`, `album`, `artist`, `year`. Only plays seen by a poll count. |
 
 On the server device:
 

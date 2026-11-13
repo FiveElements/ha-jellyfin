@@ -143,6 +143,9 @@
       "sessions": {
         "name": "Connected clients",
         "unit_of_measurement": "clients"
+      },
+      "last_played": {
+        "name": "Last played"
       }
     }
   },
