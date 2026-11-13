@@ -138,6 +138,10 @@ async def _read_body(response: aiohttp.ClientResponse, limit: int) -> bytes | No
 
 def _segment(value: str) -> str:
     """Encode one path segment so an identifier cannot escape it."""
+    if not value:
+        # "/Items/" + "" is the query endpoint, and a proxy merges "//": an
+        # empty id would reach another route instead of failing.
+        raise JellyfinNotFoundError("Empty identifier")
     if value in (".", ".."):
         # quote() keeps dots, and a proxy would resolve them to the parent.
         return value.replace(".", "%2E")

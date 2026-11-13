@@ -4,17 +4,19 @@
       "already_configured": "This Jellyfin server is already configured.",
       "reauth_successful": "Re-authentication was successful.",
       "reconfigure_successful": "Reconfiguration was successful.",
-      "wrong_account": "You signed in as another Jellyfin user. Sign in with the account this entry was set up with, or add a new entry.",
+      "wrong_account": "You signed in as another Jellyfin user. Sign in with the account this entry was set up with.",
       "unique_id_mismatch": "This address points to a different Jellyfin server.",
       "cannot_connect": "Failed to connect to the Jellyfin server.",
-      "quick_connect_disabled": "Quick Connect is disabled on this server. Enable it in the Jellyfin dashboard or sign in with a password."
+      "quick_connect_disabled": "Quick Connect is disabled on this server. Enable it in the Jellyfin dashboard or sign in with a password.",
+      "already_in_progress": "A setup of this server is already in progress."
     },
     "error": {
       "cannot_connect": "Failed to connect. Check the address and that the server is running.",
       "invalid_auth": "Invalid username or password.",
       "unknown": "Unexpected error.",
       "quick_connect_pending": "The code has not been approved yet. Approve it in a signed-in Jellyfin app, then submit again.",
-      "quick_connect_expired": "The code expired; a new one is shown below."
+      "quick_connect_expired": "The code expired; a new one is shown below.",
+      "quick_connect_refused": "The server refused the Quick Connect code. Request a new code and approve it again."
     },
     "step": {
       "user": {
@@ -177,6 +179,9 @@
     },
     "no_server": {
       "message": "No Jellyfin server is loaded."
+    },
+    "wrong_server": {
+      "message": "The address now reaches another Jellyfin server ({server}); the access token was not sent. Reconfigure the entry with the right address."
     }
   },
   "services": {

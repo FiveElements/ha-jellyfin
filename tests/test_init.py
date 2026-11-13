@@ -45,6 +45,19 @@ async def test_setup_auth_failure_starts_reauth(
     assert [f["context"]["source"] for f in flows] == ["reauth"]
 
 
+async def test_setup_refuses_another_server(
+    hass: HomeAssistant, fake: FakeJellyfin, entry: MockConfigEntry
+) -> None:
+    """The address now reaches another server: the token is never sent."""
+    other = {"Id": "0" * 32, "ServerName": "Other", "Version": "10.11.2"}
+    fake.set("GET", "/System/Info/Public", (200, other))
+    entry.add_to_hass(hass)
+    await hass.config_entries.async_setup(entry.entry_id)
+    assert entry.state is ConfigEntryState.SETUP_ERROR
+    assert not fake.calls_to("GET", "/Users/Me")
+    assert all("Token=" not in c.headers.get("Authorization", "") for c in fake.calls)
+
+
 async def test_setup_not_ready(
     hass: HomeAssistant, fake: FakeJellyfin, entry: MockConfigEntry
 ) -> None:

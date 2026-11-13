@@ -148,8 +148,11 @@ class JellyfinCoordinator(DataUpdateCoordinator[dict[str, JsonObject]]):
                 try:
                     details = await self.client.item(item_id)
                 except JellyfinError as err:
-                    LOGGER.debug("No tracks for %s: %s", item_id, err)
-                    details = {}
+                    # Not cached: a timeout at start used to leave the track
+                    # selectors unavailable for the whole film.
+                    LOGGER.debug("No tracks for %s yet: %s", item_id, err)
+                    item["MediaStreams"] = []
+                    continue
                 self._streams[item_id] = details.get("MediaStreams") or []
             item["MediaStreams"] = self._streams[item_id]
         for item_id in set(self._streams) - playing:

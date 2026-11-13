@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+from datetime import timedelta
 from typing import Any
+from unittest.mock import patch
 
+from freezegun.api import FrozenDateTimeFactory
 import pytest
 from pytest_homeassistant.common import MockConfigEntry
 from pytest_homeassistant.typing import ClientSessionGenerator, WebSocketGenerator
@@ -342,6 +345,38 @@ async def test_play_items_options(
         await jf(hass, "play_items", item_ids=["alb1"])
 
 
+async def test_play_items_shuffle_mixes_single_items(
+    hass: HomeAssistant, fake: FakeJellyfin, loaded: MockConfigEntry
+) -> None:
+    with patch(
+        "custom_components.jellyfin_control.media_player.random.shuffle",
+        side_effect=lambda ids: ids.reverse(),
+    ):
+        await jf(hass, "play_items", item_ids=["mov1", "ep1"], shuffle=True)
+    assert fake.last("POST", "/Sessions/sess1/Playing").params["itemIds"] == "ep1,mov1"
+
+
+async def test_play_items_rejects_empty_ids(
+    hass: HomeAssistant, fake: FakeJellyfin, loaded: MockConfigEntry
+) -> None:
+    fake.calls.clear()
+    with pytest.raises(ServiceValidationError):
+        await jf(hass, "play_items", item_ids=[""])
+    assert not fake.calls_to("GET", "/Items/")
+    assert not fake.calls_to("POST", "/Sessions/sess1/Playing")
+
+
+async def test_volume_cleared_when_not_reported(
+    hass: HomeAssistant, fake: FakeJellyfin, loaded: MockConfigEntry
+) -> None:
+    assert hass.states.get(PLAYER).attributes["volume_level"] == 0.5
+    session = make_session()
+    del session["PlayState"]["VolumeLevel"]
+    fake.sessions = [session]
+    await refresh(hass, loaded)
+    assert "volume_level" not in hass.states.get(PLAYER).attributes
+
+
 async def test_play_media_shuffle(
     hass: HomeAssistant, fake: FakeJellyfin, loaded: MockConfigEntry
 ) -> None:
@@ -371,6 +406,19 @@ async def test_seek_relative(
     assert fake.last("POST", "/Sessions/sess1/Playing/Seek").params == {
         "seekPositionTicks": "36000000000"
     }
+
+
+async def test_seek_relative_counts_time_since_poll(
+    hass: HomeAssistant,
+    fake: FakeJellyfin,
+    loaded: MockConfigEntry,
+    freezer: FrozenDateTimeFactory,
+) -> None:
+    """The polled position is stale while playing; 10 s later it is 10 s on."""
+    freezer.tick(timedelta(seconds=10))
+    await jf(hass, "seek_relative", seconds=5)
+    params = fake.last("POST", "/Sessions/sess1/Playing/Seek").params
+    assert params == {"seekPositionTicks": str(600_000_000 + 15 * 10_000_000)}
 
 
 async def test_client_ui_services(

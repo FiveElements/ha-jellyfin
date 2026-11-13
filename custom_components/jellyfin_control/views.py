@@ -42,11 +42,25 @@ STREAM_URL = "/api/jellyfin_control/{entry_id}/stream/{item_id}"
 # Long enough to browse a library, short enough that a leaked link expires.
 THUMBNAIL_SIGNATURE_TTL = timedelta(hours=24)
 FORWARDED_HEADERS = (
-    hdrs.CONTENT_TYPE,
     hdrs.CONTENT_LENGTH,
     hdrs.CONTENT_RANGE,
     hdrs.ACCEPT_RANGES,
 )
+# The relayed bytes come from another server but are served from Home
+# Assistant's origin: a type chosen upstream (text/html, SVG) would run script
+# there with access to the Home Assistant session.
+SAFE_HEADERS = {
+    "X-Content-Type-Options": "nosniff",
+    "Content-Security-Policy": "sandbox",
+}
+
+
+def safe_media_type(value: str | None, kinds: tuple[str, ...]) -> str | None:
+    """Return the media type when it is one of `kinds` and cannot run script."""
+    media_type = (value or "").split(";", 1)[0].strip().lower()
+    if not media_type.startswith(kinds) or "svg" in media_type or "xml" in media_type:
+        return None
+    return media_type
 
 
 @callback
@@ -122,11 +136,15 @@ class JellyfinImageView(HomeAssistantView):
             return web.Response(status=HTTPStatus.BAD_GATEWAY)
         if result is None:
             return web.Response(status=HTTPStatus.NOT_FOUND)
-        content, content_type = result
+        content, upstream_type = result
+        content_type = safe_media_type(upstream_type, ("image/",))
+        if content_type is None:
+            LOGGER.debug("Image %s refused: type %s", item_id, upstream_type)
+            return web.Response(status=HTTPStatus.BAD_GATEWAY)
         return web.Response(
             body=content,
             content_type=content_type,
-            headers={hdrs.CACHE_CONTROL: "private, max-age=86400"},
+            headers={hdrs.CACHE_CONTROL: "private, max-age=86400", **SAFE_HEADERS},
         )
 
 
@@ -171,13 +189,27 @@ class JellyfinStreamView(HomeAssistantView):
                 url, request.headers.get(hdrs.RANGE)
             ) as upstream:
                 if upstream.status not in (HTTPStatus.OK, HTTPStatus.PARTIAL_CONTENT):
-                    return web.Response(status=_relay_status(upstream.status))
+                    status = _relay_status(upstream.status)
+                    headers = {}
+                    # A 416 carries the real length so the player can retry
+                    # with a valid range.
+                    if status == HTTPStatus.REQUESTED_RANGE_NOT_SATISFIABLE and (
+                        content_range := upstream.headers.get(hdrs.CONTENT_RANGE)
+                    ):
+                        headers[hdrs.CONTENT_RANGE] = content_range
+                    return web.Response(status=status, headers=headers)
                 response = web.StreamResponse(status=upstream.status)
                 for header in FORWARDED_HEADERS:
                     if value := upstream.headers.get(header):
                         response.headers[header] = value
-                if fallback_type and hdrs.CONTENT_TYPE not in response.headers:
-                    response.headers[hdrs.CONTENT_TYPE] = fallback_type
+                response.headers.update(SAFE_HEADERS)
+                response.headers[hdrs.CONTENT_TYPE] = (
+                    safe_media_type(
+                        upstream.headers.get(hdrs.CONTENT_TYPE), ("audio/", "video/")
+                    )
+                    or fallback_type
+                    or "application/octet-stream"
+                )
                 await response.prepare(request)
                 async for chunk in upstream.content.iter_chunked(READ_CHUNK_SIZE):
                     await response.write(chunk)
