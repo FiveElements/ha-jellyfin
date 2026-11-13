@@ -417,8 +417,12 @@ async def test_seek_relative_counts_time_since_poll(
     """The polled position is stale while playing; 10 s later it is 10 s on."""
     freezer.tick(timedelta(seconds=10))
     await jf(hass, "seek_relative", seconds=5)
-    params = fake.last("POST", "/Sessions/sess1/Playing/Seek").params
-    assert params == {"seekPositionTicks": str(600_000_000 + 15 * 10_000_000)}
+    ticks = int(
+        fake.last("POST", "/Sessions/sess1/Playing/Seek").params["seekPositionTicks"]
+    )
+    # Setup ran before the clock froze: allow a second of real time.
+    expected = 600_000_000 + 15 * 10_000_000
+    assert expected <= ticks < expected + 10_000_000
 
 
 async def test_client_ui_services(
