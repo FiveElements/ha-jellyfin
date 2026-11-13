@@ -101,7 +101,7 @@ them.
 | `entity.py` | Base entities, device info, `call_api()` (client error -> translated HA error), `async_add_client_entities()`: every client platform adds entities through it (offline devices restored from the registries, live sessions on each update, ids forgotten on removal so a deleted device comes back). |
 | `useragent.py` | No Home Assistant import. Reads the OS and browser from a Jellyfin Web device id (base64 User-Agent, `=` written `1`), so clients all named "Chrome" can be told apart. |
 | `media_player.py` | One per device; all controls; entity action handlers (`async_*` methods named in `services.py`). |
-| `remote.py` / `select.py` / `sensor.py` / `button.py` | Navigation, track selection, session counts, library scan. |
+| `remote.py` / `select.py` / `sensor.py` / `button.py` | Navigation, track selection, session counts and last played item (restored), library scan. |
 | `media_source.py` | Library as a media source; identifiers are `<entry_id>/<node_id>`; resolves to a `views.py` stream path. |
 | `views.py` | Authenticated HA views relaying artwork and streams (Range pass-through, 404/416 passed, other errors 502); `signed_image_path()` and `stream_path()`. |
 | `services.py` | Entity action registration on the media player domain. |

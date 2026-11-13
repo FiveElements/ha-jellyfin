@@ -143,6 +143,9 @@
       "sessions": {
         "name": "Clients connectés",
         "unit_of_measurement": "clients"
+      },
+      "last_played": {
+        "name": "Dernier média lu"
       }
     }
   },

@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+from datetime import timedelta
+
+from freezegun.api import FrozenDateTimeFactory
 import pytest
-from pytest_homeassistant.common import MockConfigEntry
+from pytest_homeassistant.common import MockConfigEntry, mock_restore_cache
 
 from custom_components.jellyfin_control.remote import resolve_command
 from homeassistant.components.button import SERVICE_PRESS
@@ -15,7 +18,7 @@ from homeassistant.components.remote import (
 )
 from homeassistant.components.select import ATTR_OPTION, SERVICE_SELECT_OPTION
 from homeassistant.const import ATTR_ENTITY_ID
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, State
 from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 from homeassistant.helpers import entity_registry as er
 
@@ -24,6 +27,7 @@ from .conftest import FakeJellyfin, make_session, refresh
 REMOTE = "remote.living_room_remote"
 AUDIO = "select.living_room_audio_track"
 SUBTITLES = "select.living_room_subtitles"
+LAST_PLAYED = "sensor.living_room_last_played"
 
 
 def test_resolve_command() -> None:
@@ -179,3 +183,101 @@ async def test_refresh_button_disabled_for_non_admin(
     await hass.async_block_till_done()
     entity = entity_registry.async_get("button.media_scan_libraries")
     assert entity is not None and entity.disabled_by is not None
+
+
+async def test_last_played(
+    hass: HomeAssistant,
+    fake: FakeJellyfin,
+    loaded: MockConfigEntry,
+    freezer: FrozenDateTimeFactory,
+) -> None:
+    state = hass.states.get(LAST_PLAYED)
+    assert state.state == "Show - S01E02 - Pilot"
+    assert state.attributes["media_content_id"] == "ep1"
+    assert state.attributes["media_content_type"] == "Episode"
+    assert state.attributes["series"] == "Show"
+    assert state.attributes["season"] == 1
+    assert state.attributes["episode"] == 2
+    started = state.attributes["played_at"]
+
+    # Still playing: the same play, played_at does not move.
+    freezer.tick(timedelta(minutes=5))
+    await refresh(hass, loaded)
+    assert hass.states.get(LAST_PLAYED).attributes["played_at"] == started
+
+    # Stopped, then disconnected: the item stays.
+    fake.sessions = [make_session(NowPlayingItem=None)]
+    await refresh(hass, loaded)
+    fake.sessions = []
+    await refresh(hass, loaded)
+    state = hass.states.get(LAST_PLAYED)
+    assert state.state == "Show - S01E02 - Pilot"
+    assert state.attributes["played_at"] == started
+
+    # Played again after a stop: a new play.
+    freezer.tick(timedelta(minutes=5))
+    fake.sessions = [make_session()]
+    await refresh(hass, loaded)
+    assert hass.states.get(LAST_PLAYED).attributes["played_at"] != started
+
+    movie = {"Id": "mov1", "Type": "Movie", "Name": "Matrix", "ProductionYear": 1999}
+    fake.sessions = [make_session(NowPlayingItem=movie)]
+    await refresh(hass, loaded)
+    state = hass.states.get(LAST_PLAYED)
+    assert state.state == "Matrix (1999)"
+    assert state.attributes["year"] == 1999
+    assert "series" not in state.attributes
+
+
+async def test_last_played_long_title(
+    hass: HomeAssistant, fake: FakeJellyfin, loaded: MockConfigEntry
+) -> None:
+    item = {"Id": "long", "Type": "Video", "Name": "x" * 400}
+    fake.sessions = [make_session(NowPlayingItem=item)]
+    await refresh(hass, loaded)
+    assert len(hass.states.get(LAST_PLAYED).state) == 255
+
+
+async def test_last_played_restored(
+    hass: HomeAssistant, fake: FakeJellyfin, entry: MockConfigEntry
+) -> None:
+    mock_restore_cache(
+        hass,
+        [
+            State(
+                LAST_PLAYED,
+                "Matrix (1999)",
+                {
+                    "media_content_id": "mov1",
+                    "media_content_type": "Movie",
+                    "played_at": "2026-11-12T20:00:00+00:00",
+                    "year": 1999,
+                    "friendly_name": "ignored",
+                },
+            )
+        ],
+    )
+    # Still playing the restored item after the restart: not a new play.
+    movie = {"Id": "mov1", "Type": "Movie", "Name": "Matrix", "ProductionYear": 1999}
+    fake.sessions = [make_session(NowPlayingItem=movie)]
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    state = hass.states.get(LAST_PLAYED)
+    assert state.state == "Matrix (1999)"
+    assert state.attributes["media_content_id"] == "mov1"
+    assert state.attributes["played_at"] == "2026-11-12T20:00:00+00:00"
+    assert "friendly_name" in state.attributes  # its own, not the restored one
+    assert state.attributes["friendly_name"] != "ignored"
+
+    fake.sessions = []
+    await refresh(hass, entry)
+    assert hass.states.get(LAST_PLAYED).state == "Matrix (1999)"
+
+
+async def test_last_played_unavailable_when_poll_fails(
+    hass: HomeAssistant, fake: FakeJellyfin, loaded: MockConfigEntry
+) -> None:
+    fake.set("GET", "/Sessions", (500, None))
+    await refresh(hass, loaded)
+    assert hass.states.get(LAST_PLAYED).state == "unavailable"

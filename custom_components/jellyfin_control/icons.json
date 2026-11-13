@@ -12,7 +12,8 @@
     },
     "sensor": {
       "watching": { "default": "mdi:television-play" },
-      "sessions": { "default": "mdi:devices" }
+      "sessions": { "default": "mdi:devices" },
+      "last_played": { "default": "mdi:history" }
     }
   },
   "services": {
