@@ -45,7 +45,7 @@ jobs:
         # httpx before Home Assistant could alias it, and 2026.11 refuses that.
         include:
           - ha: "2026.11.0"
-            harness: "2026.11.0b6"
+            harness: "2026.11.0"
             coverage: true
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
