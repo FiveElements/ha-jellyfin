@@ -11,11 +11,44 @@ jobs:
   release:
     name: Build and publish
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     permissions:
       # Creating the release and attaching the zip.
       contents: write
+      # Reading the checks of the tagged commit.
+      checks: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      # v0.1.2 shipped while the CI of its commit was still running: a tag on a
+      # red or unmerged commit would go straight to HACS users. These are the
+      # required checks that run on a push to main (Build only runs on PRs).
+      - name: Require main and green checks on the tagged commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.sha }}
+          REQUIRED: '["Ruff","Tests","Fuzz","hassfest","HACS","Analyze (python)","Analyze (actions)"]'
+        run: |
+          if ! git merge-base --is-ancestor "$SHA" origin/main; then
+            echo "::error::$GITHUB_REF_NAME is not on main"; exit 1
+          fi
+          want=$(echo "$REQUIRED" | python -c 'import json,sys; print(len(json.load(sys.stdin)))')
+          for _ in $(seq 60); do
+            runs=$(gh api --paginate "repos/$REPO/commits/$SHA/check-runs" \
+              --jq ".check_runs[] | select(.name | IN($REQUIRED[])) | \"\(.name)=\(.conclusion)\"" \
+              | sort -u)
+            if echo "$runs" | grep -Eq '=(failure|cancelled|timed_out|action_required)$'; then
+              echo "$runs"; echo "::error::A required check failed"; exit 1
+            fi
+            ok=$(echo "$runs" | grep -c '=success$' || true)
+            if [ "$ok" -ge "$want" ]; then echo "$runs"; exit 0; fi
+            sleep 20
+          done
+          echo "$runs"; echo "::error::Checks did not finish in 20 min"; exit 1
 
       # The tag is the only place a version is written. The repository keeps
       # 0.0.0 in manifest.json and pyproject.toml, so two files can no longer
@@ -44,6 +77,18 @@ jobs:
         run: |
           cd custom_components/jellyfin_control
           zip -r ../../jellyfin_control.zip . -x '*__pycache__*'
+
+      - name: Check the zip ships the tag's version
+        run: |
+          got=$(unzip -p jellyfin_control.zip manifest.json \
+            | python -c 'import json,sys; print(json.load(sys.stdin)["version"])')
+          if [ "$got" != "${GITHUB_REF_NAME#v}" ]; then
+            echo "::error::zip manifest says $got"; exit 1
+          fi
+          unzip -l jellyfin_control.zip | grep -q ' __init__.py$'
+          if unzip -l jellyfin_control.zip | grep -q '__pycache__'; then
+            echo "::error::zip contains __pycache__"; exit 1
+          fi
 
       - name: Publish the release
         uses: softprops/action-gh-release@8a0cd651e5b2365bd640854a3fa5dfc70e4875f3 # v3.0.4

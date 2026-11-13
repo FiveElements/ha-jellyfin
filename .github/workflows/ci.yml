@@ -52,15 +52,24 @@ jobs:
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.14"
+      # pip spent a minute of each run installing the harness; uv with a
+      # cache keyed on this file installs it in seconds.
+      - uses: astral-sh/setup-uv@18d369b23da25a81e9458561248e1aafff6a70fa # v10.3.1
+        with:
+          enable-cache: true
+          cache-dependency-glob: |
+            .github/workflows/ci.yml
+            requirements-test.txt
       # Not hash-locked, unlike lint, docs and fuzz: the lock had to carry Home
       # Assistant's exact pins, so every CVE in a package HA pins became an
-      # alert here that no change of ours could fix.
+      # alert here that no change of ours could fix. One resolution, so
+      # pytest-cov and mypy cannot move a package Home Assistant pins.
       - name: Install
         env:
           HARNESS: ${{ matrix.harness }}
-        run: |
-          pip install "pytest-homeassistant==$HARNESS"
-          pip install pytest-cov==7.1.0 mypy==1.18.2
+        run: >-
+          uv pip install --system
+          "pytest-homeassistant==$HARNESS" pytest-cov==7.1.0 mypy==1.18.2
       - name: Test
         run: |
           pytest tests \
@@ -69,6 +78,11 @@ jobs:
             --cov-report=xml \
             --cov-fail-under=95 \
             -q
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .mypy_cache
+          key: mypy-${{ matrix.harness }}-${{ hashFiles('custom_components/**/*.py') }}
+          restore-keys: mypy-${{ matrix.harness }}-
       - name: Type check
         run: mypy custom_components/jellyfin_control
       - name: Upload coverage
