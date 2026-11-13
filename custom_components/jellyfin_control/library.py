@@ -270,7 +270,10 @@ class Library:
         node = folder_node(node_id, SPECIAL_TITLES[node_id])
         client = self.client
         if node_id == SPECIAL_RESUME:
-            return _with_children(node, await client.resume_items(limit))
+            # Without MediaTypes the server also listed series and seasons
+            # (387 entries, 270 of them folders, on a real library).
+            resume = {**limit, "MediaTypes": "Video"}
+            return _with_children(node, await client.resume_items(resume))
         if node_id == SPECIAL_NEXT_UP:
             return _with_children(node, await client.next_up(limit))
         if node_id == SPECIAL_LATEST:

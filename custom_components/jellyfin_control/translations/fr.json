@@ -342,6 +342,10 @@
         "parent_id": {
           "name": "Identifiant parent",
           "description": "Dossier, série, album ou special:resume, special:next_up, special:latest, special:favorites. Vide pour la racine."
+        },
+        "limit": {
+          "name": "Limite",
+          "description": "Nombre maximal d'éléments renvoyés ; le reste est compté dans not_shown."
         }
       }
     },

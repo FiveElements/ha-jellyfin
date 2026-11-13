@@ -249,7 +249,16 @@ class JellyfinClientEntity(JellyfinEntity):
     async def async_will_remove_from_hass(self) -> None:
         """Let the platform create the entity again if the device returns."""
         await super().async_will_remove_from_hass()
-        if self._known is not None:
+        if self._known is None:
+            return
+        # Home Assistant also removes and re-adds an entity whose entity_id
+        # was renamed; forgetting it then made the next poll add a duplicate
+        # ("does not generate unique IDs ... already exists"). Only a removed
+        # registry entry (device or entity deleted) means it may come back.
+        registry = er.async_get(self.hass)
+        if not registry.async_get_entity_id(
+            self.platform.domain, DOMAIN, str(self.unique_id)
+        ):
             self._known.discard(str(self.unique_id))
 
     @property

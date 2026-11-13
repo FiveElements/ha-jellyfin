@@ -102,6 +102,22 @@ async def test_deleted_device_comes_back(
     assert hass.states.get("select.living_room_subtitles") is not None
 
 
+async def test_renamed_entity_is_not_added_twice(
+    hass: HomeAssistant,
+    fake: FakeJellyfin,
+    loaded: MockConfigEntry,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Renaming an entity_id removes and re-adds the same entity object."""
+    er.async_get(hass).async_update_entity(
+        PLAYER, new_entity_id="media_player.jellyfin_salon"
+    )
+    await hass.async_block_till_done()
+    await refresh(hass, loaded)
+    assert hass.states.get("media_player.jellyfin_salon") is not None
+    assert "already exists" not in caplog.text
+
+
 async def test_remove_device_while_not_loaded(
     hass: HomeAssistant, fake: FakeJellyfin, loaded: MockConfigEntry
 ) -> None:

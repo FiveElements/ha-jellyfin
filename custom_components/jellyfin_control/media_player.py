@@ -30,6 +30,7 @@ from .const import (
     CONTENT_TYPE_MAP,
     DOMAIN,
     LOGGER,
+    MAX_BROWSE_RESULTS,
     MAX_IMAGE_BYTES,
     MAX_IMAGE_WIDTH,
     MAX_QUEUE_ITEMS,
@@ -636,15 +637,16 @@ class JellyfinMediaPlayer(JellyfinClientEntity, MediaPlayerEntity):
         return cast(ServiceResponse, {"items": items})
 
     async def async_browse_library(
-        self, parent_id: str | None = None
+        self, parent_id: str | None = None, limit: int = MAX_BROWSE_RESULTS
     ) -> ServiceResponse:
         """Return the children of a library node (root when omitted)."""
         node = await self._node(parent_id)
+        shown = node.children[:limit]
         return {
             "id": node.node_id,
             "title": node.title,
-            "not_shown": node.not_shown,
-            "items": [summarize(child) for child in node.children],
+            "not_shown": node.not_shown + len(node.children) - len(shown),
+            "items": [summarize(child) for child in shown],
         }
 
     async def async_search_library(

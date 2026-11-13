@@ -60,7 +60,7 @@ More in the [documentation](https://fiveelements.github.io/ha-jellyfin/).
 | `display_content` | `item_id` (required) |
 | `set_audio_stream`, `set_subtitle_stream` | `index` (required; `-1` turns subtitles off) |
 | `set_user_data` | `item_id` (required), `played`, `favorite` |
-| `browse_library` | `parent_id` (root when empty) |
+| `browse_library` | `parent_id` (root when empty), `limit` (default 100, at most 1000; the rest is counted in `not_shown`) |
 | `search_library` | `query` (required), `media_types`, `limit` (default 50, 1-500) |
 | `get_queue` | none |
 
