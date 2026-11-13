@@ -20,7 +20,7 @@ starts a **re-authentication**.
 | Option | Default | Meaning |
 | --- | --- | --- |
 | Polling interval | 5 s | How often sessions are read (2-300 s). |
-| Audio streaming codec | AAC | Codec used when library music is streamed to another Home Assistant player through the media source. |
+| Audio streaming codec | MP3 | Codec (MP3, AAC, Opus, FLAC) used when library music is streamed to another Home Assistant player through the media source. |
 
 ## Data updates
 

@@ -42,6 +42,8 @@ SPECIAL_TITLES: dict[str, str] = {
     SPECIAL_FAVORITES: "Favorites",
 }
 
+QUEUE_LOOKUP_CHUNK = 100
+
 PLAYABLE_MEDIA_TYPES = frozenset({"Video", "Audio"})
 
 _SORT_BY_NAME = {"SortBy": "SortName", "SortOrder": "Ascending"}
@@ -281,7 +283,12 @@ class Library:
             "Recursive": True,
             **_SORT_BY_NAME,
         }
-        return _with_children(node, await client.items(params))
+        # /Items never returns MusicArtist; favourite artists come from /Artists.
+        artists = await client.artists({**limit, "isFavorite": True, **_SORT_BY_NAME})
+        result = await client.items(params)
+        node = _with_children(node, result)
+        node.children = _nodes(artists["Items"]) + node.children
+        return node
 
     async def _music(self, prefix: str, library_id: str, limit: Params) -> LibraryNode:
         client = self.client
@@ -374,22 +381,39 @@ class Library:
             "Limit": MAX_QUEUE_ITEMS,
         }
         if item_type == "MusicArtist":
-            params |= {"AlbumArtistIds": item_id, "IncludeItemTypes": "Audio"}
-            params["SortBy"] = (
-                "Random"
-                if shuffle
-                else "ProductionYear,Album,ParentIndexNumber,IndexNumber,SortName"
-            )
-        elif item_type in ("MusicGenre", "Genre"):
-            params |= {"GenreIds": item_id}
-            params["SortBy"] = "Random" if shuffle else "SortName"
+            # ArtistIds, not AlbumArtistIds: compilations and featured
+            # appearances belong to the artist too.
+            params |= {"ArtistIds": item_id, "IncludeItemTypes": "Audio"}
+            order = "ProductionYear,Album,ParentIndexNumber,IndexNumber,SortName"
+        elif item_type == "MusicGenre":
+            # Genres are matched by name across item types: without the audio
+            # filter, "Rock" queued movies tagged Rock as well.
+            params |= {
+                "GenreIds": item_id,
+                "IncludeItemTypes": "Audio",
+                "MediaTypes": "Audio",
+            }
+            order = "AlbumArtist,Album,ParentIndexNumber,IndexNumber,SortName"
+        elif item_type == "Genre":
+            params |= {"GenreIds": item_id, "MediaTypes": "Video"}
+            order = "SortName"
         elif item_type == "Playlist":
+            # No SortBy: a playlist keeps the order its owner gave it.
             params["ParentId"] = item_id
+            order = ""
+        elif item_type in ("MusicAlbum", "Season", "Series"):
+            params["ParentId"] = item_id
+            order = "ParentIndexNumber,IndexNumber,SortName"
         else:
+            # Disc and track numbers only mean something inside one album or
+            # season; across a whole folder they interleaved every album's
+            # track 1, then every track 2.
             params["ParentId"] = item_id
-            params["SortBy"] = (
-                "Random" if shuffle else "ParentIndexNumber,IndexNumber,SortName"
-            )
+            order = "Album,ParentIndexNumber,IndexNumber,SortName"
+        if shuffle:
+            params["SortBy"] = "Random"
+        elif order:
+            params["SortBy"] = order
         result = await self.client.items(params)
         return [str(i["Id"]) for i in result["Items"] if i.get("Id")]
 
@@ -399,8 +423,15 @@ class Library:
         if not queue:
             return []
         ids = list(dict.fromkeys(str(q["Id"]) for q in queue))
-        result = await self.client.items({"Ids": ",".join(ids), "Fields": ITEM_FIELDS})
-        by_id = {str(i["Id"]): i for i in result["Items"] if i.get("Id")}
+        by_id: dict[str, JsonObject] = {}
+        # Ids travel in the query string: a queue started by another client
+        # can be long enough for a proxy to refuse the URL.
+        for start in range(0, len(ids), QUEUE_LOOKUP_CHUNK):
+            chunk = ids[start : start + QUEUE_LOOKUP_CHUNK]
+            result = await self.client.items(
+                {"Ids": ",".join(chunk), "Fields": ITEM_FIELDS}
+            )
+            by_id |= {str(i["Id"]): i for i in result["Items"] if i.get("Id")}
         current = session.get("PlaylistItemId")
         now_playing = (session.get("NowPlayingItem") or {}).get("Id")
         entries: list[JsonObject] = []

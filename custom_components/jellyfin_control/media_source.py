@@ -16,10 +16,11 @@ from homeassistant.components.media_source import (
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.core import HomeAssistant
 
-from .api import JellyfinError, JsonObject
-from .const import CONF_AUDIO_CODEC, DEFAULT_AUDIO_CODEC, DOMAIN, MAX_IMAGE_WIDTH
+from .api import AUDIO_FORMATS, JellyfinError, JsonObject
+from .const import CONF_AUDIO_CODEC, DEFAULT_AUDIO_CODEC, DOMAIN
 from .coordinator import JellyfinConfigEntry
 from .library import Library, LibraryNode
+from .views import signed_image_path, stream_path
 
 
 async def async_get_media_source(hass: HomeAssistant) -> MediaSource:
@@ -27,21 +28,24 @@ async def async_get_media_source(hass: HomeAssistant) -> MediaSource:
     return JellyfinMediaSource(hass)
 
 
-def mime_type(item: JsonObject) -> str | None:
-    """Guess the MIME type from the first media source's path or container."""
-    sources = item.get("MediaSources") or []
-    for source in sources:
-        if path := source.get("Path"):
-            guessed, _ = mimetypes.guess_type(str(path))
-            if guessed:
-                return guessed
-        if container := source.get("Container"):
-            guessed, _ = mimetypes.guess_type(f"file.{str(container).split(',')[0]}")
-            if guessed:
-                return guessed
+def mime_type(item: JsonObject, audio_codec: str = DEFAULT_AUDIO_CODEC) -> str | None:
+    """Return the MIME type of what the stream relay will send.
+
+    Audio is served in the configured codec (as is or transcoded), so its type
+    follows the codec, not the file. Video is served as stored.
+    """
     media_type = item.get("MediaType")
     if media_type == "Audio":
-        return "audio/mpeg"
+        return AUDIO_FORMATS.get(audio_codec, AUDIO_FORMATS["mp3"])[1]
+    sources = item.get("MediaSources") or []
+    containers = [s.get("Container") for s in sources] + [item.get("Container")]
+    names = [s.get("Path") for s in sources]
+    names += [f"file.{str(c).split(',')[0]}" for c in containers if c]
+    for name in names:
+        if name:
+            guessed, _ = mimetypes.guess_type(str(name))
+            if guessed:
+                return guessed
     if media_type == "Video":
         return "video/mp4"
     return None
@@ -88,16 +92,16 @@ class JellyfinMediaSource(MediaSource):
             raise Unresolvable(
                 translation_domain=DOMAIN, translation_key="not_found"
             ) from err
-        mime = mime_type(media)
+        codec = entry.options.get(CONF_AUDIO_CODEC, DEFAULT_AUDIO_CODEC)
+        mime = mime_type(media, codec)
         if mime is None:
             raise Unresolvable(
                 translation_domain=DOMAIN, translation_key="nothing_to_play"
             )
-        if media.get("MediaType") == "Audio":
-            codec = entry.options.get(CONF_AUDIO_CODEC, DEFAULT_AUDIO_CODEC)
-            return PlayMedia(client.audio_stream_url(item_id, codec), mime)
-        sources = media.get("MediaSources") or [{}]
-        return PlayMedia(client.video_stream_url(item_id, sources[0].get("Id")), mime)
+        # A relay path, not a Jellyfin URL: the token stays between Home
+        # Assistant and the server instead of landing in the player's state,
+        # the recorder and the player's own logs.
+        return PlayMedia(stream_path(entry.entry_id, item_id), mime)
 
     @override
     async def async_browse_media(self, item: MediaSourceItem) -> BrowseMediaSource:
@@ -150,15 +154,10 @@ class JellyfinMediaSource(MediaSource):
     def _to_source(
         self, entry: JellyfinConfigEntry, node: LibraryNode, *, with_children: bool
     ) -> BrowseMediaSource:
-        client = entry.runtime_data.client
         thumbnail = None
         if node.image is not None:
-            thumbnail = client.image_url(
-                node.image.item_id,
-                node.image.image_type,
-                node.image.tag,
-                MAX_IMAGE_WIDTH,
-            )
+            thumbnail = signed_image_path(self.hass, entry.entry_id, node.image)
+        codec = entry.options.get(CONF_AUDIO_CODEC, DEFAULT_AUDIO_CODEC)
         # Only single items stream; folders are expanded by the browser.
         playable = node.can_play and node.item is not None and not node.can_expand
         return BrowseMediaSource(
@@ -166,7 +165,7 @@ class JellyfinMediaSource(MediaSource):
             identifier=f"{entry.entry_id}/{node.node_id}",
             media_class=node.media_class,
             media_content_type=(
-                (mime_type(node.item) or node.content_type)
+                (mime_type(node.item, codec) or node.content_type)
                 if playable and node.item is not None
                 else node.content_type
             ),

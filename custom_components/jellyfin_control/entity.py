@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Iterable
 from typing import override
 
+from homeassistant.core import callback
 from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
-from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers import device_registry as dr, entity_registry as er
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
@@ -18,7 +19,11 @@ from .api import (
     JsonObject,
 )
 from .const import DOMAIN
-from .coordinator import JellyfinCoordinator, supported_commands
+from .coordinator import (
+    JellyfinConfigEntry,
+    JellyfinCoordinator,
+    supported_commands,
+)
 
 
 def server_device_info(coordinator: JellyfinCoordinator) -> DeviceInfo:
@@ -36,6 +41,70 @@ def server_device_info(coordinator: JellyfinCoordinator) -> DeviceInfo:
 def client_device_identifier(coordinator: JellyfinCoordinator, device_key: str) -> str:
     """Return the registry identifier of a client device."""
     return f"{coordinator.server_id}-{device_key}"
+
+
+@callback
+def async_add_client_entities(
+    entry: JellyfinConfigEntry,
+    domain: str,
+    async_add_entities: Callable[[Iterable[JellyfinClientEntity]], None],
+    factory: Callable[[str], Iterable[JellyfinClientEntity]],
+    include: Callable[[JsonObject], bool] = lambda session: True,
+) -> None:
+    """Create a platform's client entities now and whenever a device appears.
+
+    Devices already in the registry get their entities back at setup even when
+    the app is offline: built only from live sessions, they used to stay
+    restored-unavailable instead of reading off. Entities are tracked by
+    unique id and forgotten when removed, so a device the user deleted comes
+    back on its next connection instead of only after a reload.
+    """
+    coordinator = entry.runtime_data.coordinator
+    hass = coordinator.hass
+    entity_registry = er.async_get(hass)
+    known: set[str] = set()
+
+    def build(device_key: str, *, registered_only: bool) -> list[JellyfinClientEntity]:
+        entities = []
+        for entity in factory(device_key):
+            unique_id = str(entity.unique_id)
+            if unique_id in known:
+                continue
+            if registered_only and not entity_registry.async_get_entity_id(
+                domain, DOMAIN, unique_id
+            ):
+                continue
+            known.add(unique_id)
+            entity.forget_on_removal(known)
+            entities.append(entity)
+        return entities
+
+    prefix = f"{coordinator.server_id}-"
+    offline = {
+        identifier[len(prefix) :]
+        for device in dr.async_entries_for_config_entry(
+            dr.async_get(hass), entry.entry_id
+        )
+        for registry_domain, identifier in device.identifiers
+        if registry_domain == DOMAIN and identifier.startswith(prefix)
+    } - set(coordinator.data)
+    async_add_entities(
+        [e for key in sorted(offline) for e in build(key, registered_only=True)]
+    )
+
+    @callback
+    def add_live() -> None:
+        async_add_entities(
+            [
+                entity
+                for key, session in coordinator.data.items()
+                if include(session)
+                for entity in build(key, registered_only=False)
+            ]
+        )
+
+    add_live()
+    entry.async_on_unload(coordinator.async_add_listener(add_live))
 
 
 async def call_api[T](call: Callable[[], Awaitable[T]]) -> T:
@@ -89,7 +158,13 @@ class JellyfinClientEntity(JellyfinEntity):
         self.device_key = device_key
         identifier = client_device_identifier(coordinator, device_key)
         self._attr_unique_id = identifier if key is None else f"{identifier}-{key}"
-        session = coordinator.session(device_key) or {}
+        self._known: set[str] | None = None
+        session = coordinator.session(device_key)
+        if session is None:
+            # Offline at setup: link to the registered device without
+            # overwriting its name and model with placeholders.
+            self._attr_device_info = DeviceInfo(identifiers={(DOMAIN, identifier)})
+            return
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, identifier)},
             manufacturer="Jellyfin",
@@ -102,6 +177,17 @@ class JellyfinClientEntity(JellyfinEntity):
                 config_entry_id=coordinator.config_entry.entry_id,
             ),
         )
+
+    def forget_on_removal(self, known: set[str]) -> None:
+        """Keep the platform tracking set, to leave it when removed."""
+        self._known = known
+
+    @override
+    async def async_will_remove_from_hass(self) -> None:
+        """Let the platform create the entity again if the device returns."""
+        await super().async_will_remove_from_hass()
+        if self._known is not None:
+            self._known.discard(str(self.unique_id))
 
     @property
     def session(self) -> JsonObject | None:

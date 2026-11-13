@@ -97,7 +97,7 @@ class JellyfinCoordinator(DataUpdateCoordinator[dict[str, JsonObject]]):
         self.is_admin = bool(isinstance(policy, dict) and policy.get("IsAdministrator"))
         self.own_device_id: str = config_entry.data[CONF_CLIENT_DEVICE_ID]
         # Devices seen since setup: entities are created once per device.
-        self.known_devices: set[str] = set()
+        self._streams: dict[str, list[JsonObject]] = {}
 
     @override
     async def _async_update_data(self) -> dict[str, JsonObject]:
@@ -125,7 +125,35 @@ class JellyfinCoordinator(DataUpdateCoordinator[dict[str, JsonObject]]):
             current = result.get(key)
             if current is None or _activity(session) >= _activity(current):
                 result[key] = session
+        await self._add_missing_streams(result)
         return result
+
+    async def _add_missing_streams(self, sessions: dict[str, JsonObject]) -> None:
+        """Fill in the tracks of items the server reported without them.
+
+        The server only lists MediaStreams when it knows the media source; the
+        track selectors used to stay unavailable then. One lookup per item,
+        cached while it plays.
+        """
+        playing: set[str] = set()
+        for session in sessions.values():
+            item = session.get("NowPlayingItem")
+            if not isinstance(item, dict) or not item.get("Id"):
+                continue
+            item_id = str(item["Id"])
+            playing.add(item_id)
+            if item.get("MediaStreams") or item.get("MediaType") != "Video":
+                continue
+            if item_id not in self._streams:
+                try:
+                    details = await self.client.item(item_id)
+                except JellyfinError as err:
+                    LOGGER.debug("No tracks for %s: %s", item_id, err)
+                    details = {}
+                self._streams[item_id] = details.get("MediaStreams") or []
+            item["MediaStreams"] = self._streams[item_id]
+        for item_id in set(self._streams) - playing:
+            del self._streams[item_id]
 
     def session(self, device_key: str) -> JsonObject | None:
         """Return the live session of a device, if connected."""

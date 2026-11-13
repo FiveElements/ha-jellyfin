@@ -225,9 +225,10 @@ class Call:
     params: dict[str, str]
     body: Any
     headers: dict[str, str]
+    options: dict[str, Any] = field(default_factory=dict)
 
 
-type Handler = Callable[["Call"], tuple[int, Any]]
+type Handler = Callable[["Call"], tuple[Any, ...]]
 
 
 @dataclass
@@ -236,7 +237,7 @@ class FakeJellyfin:
 
     sessions: list[dict[str, Any]] = field(default_factory=lambda: [make_session()])
     calls: list[Call] = field(default_factory=list)
-    overrides: dict[tuple[str, str], tuple[int, Any] | Handler | Exception] = field(
+    overrides: dict[tuple[str, str], tuple[Any, ...] | Handler | Exception] = field(
         default_factory=dict
     )
     password: str = "pw"
@@ -244,6 +245,11 @@ class FakeJellyfin:
     quick_connect_authenticated: bool = False
     image: bytes = b"\x89PNG-image"
     base_path: str = ""
+    stream: bytes = b"0123456789"
+    # Raised by a media stream after its first chunk (a dropped connection).
+    stream_error: Exception | None = None
+    # verify_ssl of every client session the integration asked for.
+    sessions_requested: list[bool] = field(default_factory=list)
 
     def set(self, method: str, path: str, result: Any) -> None:
         """Override the answer of an endpoint (status/body, handler or error)."""
@@ -259,7 +265,7 @@ class FakeJellyfin:
         assert matching, f"no call to {method} {path}"
         return matching[-1]
 
-    def handle(self, call: Call) -> tuple[int, Any]:
+    def handle(self, call: Call) -> tuple[Any, ...]:
         """Answer one request."""
         override = self.overrides.get((call.method, call.path))
         if isinstance(override, Exception):
@@ -268,9 +274,16 @@ class FakeJellyfin:
             return override(call)
         if override is not None:
             return override
-        return self._default(call)
+        result = self._default(call)
+        # Like the real server: everything but the login endpoints needs the
+        # token, so a request sent without it fails here too. Unknown paths
+        # stay 404, as routing comes first.
+        token = f'Token="{TOKEN}"' in call.headers.get("Authorization", "")
+        if result[0] != 404 and call.path not in PUBLIC_PATHS and not token:
+            return 401, None
+        return result
 
-    def _default(self, call: Call) -> tuple[int, Any]:
+    def _default(self, call: Call) -> tuple[Any, ...]:
         path, params = call.path, call.params
         if path == "/System/Info/Public":
             return 200, {"Id": SERVER_ID, "ServerName": "Media", "Version": "10.11.2"}
@@ -297,6 +310,8 @@ class FakeJellyfin:
                 "Policy": {"IsAdministrator": self.is_admin},
             }
         if path == "/Sessions":
+            if params.get("controllableByUserId") != USER_ID:
+                return 400, None
             return 200, copy.deepcopy(self.sessions)
         if path.startswith("/Sessions/") or path in (
             "/Library/Refresh",
@@ -307,6 +322,22 @@ class FakeJellyfin:
             return 200, page("lib_movies", "lib_shows", "lib_music", "lib_tv")
         if path == "/Items/Latest":
             return 200, [copy.deepcopy(ITEMS["mov1"])]
+        if re.fullmatch(r"/(Audio/[^/]+/universal|Videos/[^/]+/stream)", path):
+            data = self.stream
+            if (wanted := call.headers.get("Range")) and wanted.startswith("bytes="):
+                start = int(wanted[6:].split("-")[0])
+                if start >= len(data):
+                    return 416, None
+                return (
+                    206,
+                    data[start:],
+                    {
+                        "Content-Range": f"bytes {start}-{len(data) - 1}/{len(data)}",
+                        "Accept-Ranges": "bytes",
+                    },
+                )
+            content_type = "video/x-matroska" if path.startswith("/Videos") else ""
+            return 200, data, {"Content-Type": content_type} if content_type else {}
         if m := re.fullmatch(r"/Items/([^/]+)/Images/(\w+)", path):
             return 200, self.image
         if m := re.fullmatch(r"/Items/([^/]+)/InstantMix", path):
@@ -345,22 +376,44 @@ class FakeJellyfin:
         return {"AccessToken": TOKEN, "User": {"Id": USER_ID, "Name": "jerome"}}
 
 
+PUBLIC_PATHS = frozenset(
+    {
+        "/System/Info/Public",
+        "/Users/AuthenticateByName",
+        "/Users/AuthenticateWithQuickConnect",
+        "/QuickConnect/Enabled",
+        "/QuickConnect/Initiate",
+        "/QuickConnect/Connect",
+    }
+)
+
+
 class FakeContent:
     """Stand-in for aiohttp's StreamReader."""
 
-    def __init__(self, data: bytes) -> None:
-        """Keep the body."""
+    def __init__(self, data: bytes, error: Exception | None = None) -> None:
+        """Keep the body, and an error to raise after the first chunk."""
         self._data = data
+        self.error = error
 
     async def read(self, n: int = -1) -> bytes:
         """Return up to n bytes."""
         return self._data if n < 0 else self._data[:n]
 
+    async def iter_chunked(self, size: int) -> AsyncIterator[bytes]:
+        """Yield the body in chunks."""
+        for start in range(0, len(self._data), max(1, size)):
+            yield self._data[start : start + size]
+            if self.error is not None:
+                raise self.error
+
 
 class FakeResponse:
     """Stand-in for aiohttp's ClientResponse."""
 
-    def __init__(self, status: int, body: Any) -> None:
+    def __init__(
+        self, status: int, body: Any, headers: dict[str, str] | None = None
+    ) -> None:
         """Encode the body like the server would."""
         self.status = status
         if isinstance(body, bytes):
@@ -371,6 +424,9 @@ class FakeResponse:
             self.content_type = "application/json"
         self.content_length = len(self._raw)
         self.content = FakeContent(self._raw)
+        self.headers = dict(headers or {})
+        if isinstance(body, bytes):
+            self.headers.setdefault("Content-Length", str(len(self._raw)))
 
     async def text(self) -> str:
         """Return the body as text."""
@@ -398,7 +454,7 @@ class FakeSession:
         *,
         headers: dict[str, str] | None = None,
         json: Any = None,
-        **_: Any,
+        **options: Any,
     ) -> FakeResponse:
         """Answer one request."""
         url = URL(str(url))
@@ -408,10 +464,12 @@ class FakeSession:
             if not path.startswith(self.server.base_path):
                 return FakeResponse(404, None)
             path = path[len(self.server.base_path) :]
-        call = Call(method, path, dict(url.query), json, dict(headers or {}))
+        call = Call(method, path, dict(url.query), json, dict(headers or {}), options)
         self.server.calls.append(call)
-        status, body = self.server.handle(call)
-        return FakeResponse(status, body)
+        response = FakeResponse(*self.server.handle(call))
+        if self.server.stream_error and path.endswith(("/stream", "/universal")):
+            response.content.error = self.server.stream_error
+        return response
 
     def get(self, url: URL, **kwargs: Any) -> FakeResponse:
         """Answer a GET."""
@@ -433,9 +491,14 @@ def hass_config_dir(hass_tmp_config_dir: str) -> str:
 def fake() -> Generator[FakeJellyfin]:
     """Serve the fake Jellyfin to every client the integration creates."""
     server = FakeJellyfin()
+    session = FakeSession(server)
+
+    def get_session(hass: Any, verify_ssl: bool = True) -> FakeSession:
+        server.sessions_requested.append(verify_ssl)
+        return session
+
     with patch(
-        "custom_components.jellyfin_control.async_get_clientsession",
-        return_value=FakeSession(server),
+        "custom_components.jellyfin_control.async_get_clientsession", get_session
     ):
         yield server
 

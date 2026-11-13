@@ -138,7 +138,6 @@ async def test_sensors(
     hass: HomeAssistant, fake: FakeJellyfin, loaded: MockConfigEntry
 ) -> None:
     assert hass.states.get("sensor.media_active_clients").state == "1"
-    assert hass.states.get("sensor.media_connected_clients").state == "1"
     fake.sessions.append(
         make_session(
             Id="s2", DeviceId="dev2", DeviceName="Kitchen", NowPlayingItem=None
@@ -146,7 +145,6 @@ async def test_sensors(
     )
     await refresh(hass, loaded)
     assert hass.states.get("sensor.media_active_clients").state == "1"
-    assert hass.states.get("sensor.media_connected_clients").state == "2"
 
 
 async def test_refresh_button(

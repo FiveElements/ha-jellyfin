@@ -226,6 +226,11 @@ class JellyfinControlConfigFlow(ConfigFlow, domain=DOMAIN):
         }
         if self.source == SOURCE_REAUTH:
             entry = self._get_reauth_entry()
+            if auth.user_id != entry.data[CONF_USER_ID]:
+                # Signing in as someone else would silently hand the entry
+                # (sessions, library, played state) to another account.
+                await self._async_revoke(auth)
+                return self.async_abort(reason="wrong_account")
             return self.async_update_reload_and_abort(
                 entry,
                 data_updates={
@@ -234,6 +239,21 @@ class JellyfinControlConfigFlow(ConfigFlow, domain=DOMAIN):
                 },
             )
         return self.async_create_entry(title=self._server.name, data=data)
+
+    async def _async_revoke(self, auth: AuthResult) -> None:
+        """Log a token out, ignoring a server that is gone."""
+        client = create_client(
+            self.hass,
+            self._url,
+            self._device_id,
+            verify_ssl=self._verify_ssl,
+            access_token=auth.access_token,
+            user_id=auth.user_id,
+        )
+        try:
+            await client.logout()
+        except JellyfinError as err:
+            LOGGER.debug("Could not revoke the unused token: %s", err)
 
     # -- reauth -------------------------------------------------------------
 

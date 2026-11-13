@@ -25,7 +25,11 @@
 - Jellyfin clients only play items of **their own library**: media sources of
   other integrations (TTS, local files) cannot be sent to them.
 - A folder is expanded into at most **200 items** (URL length), the media
-  browser lists at most **1000 children** per folder.
+  browser lists at most **1000 children** per folder, *Recently added* the
+  **100** newest items.
+- `search_library` returns **50** items by default, at most **500**.
+- `send_command` and raw remote commands are sent as they are: the client
+  ignores a command it does not know.
 - Scanning libraries needs an **administrator** account.
 - Jellyfin has no discovery protocol Home Assistant can use: the address is
   entered by hand.

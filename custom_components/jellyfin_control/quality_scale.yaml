@@ -40,7 +40,9 @@ rules:
   integration-owner: done
   log-when-unavailable: done
   parallel-updates: done
-  reauthentication-flow: done
+  reauthentication-flow:
+    status: done
+    comment: Password or Quick Connect; signing in as another Jellyfin user aborts with wrong_account and revokes the new token.
   test-coverage: done
 
   # Gold
@@ -64,7 +66,9 @@ rules:
   entity-device-class:
     status: exempt
     comment: No device class fits a session count or a Jellyfin client; media players are left without one because a client can be a TV, a phone or a browser.
-  entity-disabled-by-default: done
+  entity-disabled-by-default:
+    status: done
+    comment: The connected-clients sensor is disabled by default, and so is the library scan button for non-administrators.
   entity-translations: done
   exception-translations: done
   icon-translations: done
@@ -72,9 +76,13 @@ rules:
   repair-issues:
     status: exempt
     comment: Every failure the user can fix is a reauthentication (token revoked) or a reconfiguration (address changed), both handled by their flows.
-  stale-devices: done
+  stale-devices:
+    status: done
+    comment: A client device whose app no longer connects reads off and can be deleted from its device page (async_remove_config_entry_device refuses only live clients and the server). Jellyfin keeps no reliable list of retired devices for a non-admin user, so removal is not automatic.
 
   # Platinum
-  async-dependency: done
+  async-dependency:
+    status: exempt
+    comment: The integration has no PyPI dependency; its REST client (api.py) is asynchronous and part of the integration.
   inject-websession: done
   strict-typing: done
