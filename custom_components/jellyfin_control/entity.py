@@ -24,6 +24,7 @@ from .coordinator import (
     JellyfinCoordinator,
     supported_commands,
 )
+from .useragent import client_browser
 
 
 def server_device_info(coordinator: JellyfinCoordinator) -> DeviceInfo:
@@ -36,6 +37,67 @@ def server_device_info(coordinator: JellyfinCoordinator) -> DeviceInfo:
         sw_version=coordinator.server_version,
         configuration_url=coordinator.client.url,
     )
+
+
+def client_device_details(
+    session: JsonObject, host_name: str | None = None
+) -> dict[str, str | None]:
+    """Return the name, model and version shown for a client device.
+
+    Every Jellyfin Web tab reports "Chrome" (or "Firefox"...): the name gets
+    the machine it runs on (its local DNS name), or else its operating
+    system, and the model the browser and system read from the User-Agent
+    its device id encodes. Three browsers on three computers no longer look
+    identical.
+    """
+    name = str(session.get("DeviceName") or session.get("DeviceId") or "")
+    browser = client_browser(session.get("DeviceId"))
+    machine = host_name.split(".", 1)[0] if host_name else None
+    if not machine and browser:
+        machine = browser.system
+    if machine and machine.lower() not in name.lower():
+        name = f"{name} · {machine}"
+    model = session.get("Client")
+    if browser:
+        parts = [p for p in (model, browser.label, browser.system) if p]
+        model = " · ".join(parts) or None
+    return {
+        "name": name,
+        "model": model,
+        "sw_version": session.get("ApplicationVersion"),
+    }
+
+
+@callback
+def async_sync_client_devices(coordinator: JellyfinCoordinator) -> None:
+    """Refresh the registry name, model and version of connected clients.
+
+    Device info is only applied when a device is created: an app updated or
+    a browser upgraded kept its old version, and devices created before the
+    name carried the operating system kept the bare "Chrome". A name the
+    user chose is stored apart (name_by_user) and stays.
+    """
+    registry = dr.async_get(coordinator.hass)
+    devices = {
+        identifier: device
+        for device in dr.async_entries_for_config_entry(
+            registry, coordinator.config_entry.entry_id
+        )
+        for registry_domain, identifier in device.identifiers
+        if registry_domain == DOMAIN
+    }
+    for device_key, session in (coordinator.data or {}).items():
+        device = devices.get(client_device_identifier(coordinator, device_key))
+        if device is None:
+            continue
+        details = client_device_details(session, coordinator.host_name(session))
+        if any(getattr(device, key) != value for key, value in details.items()):
+            registry.async_update_device(
+                device.id,
+                name=details["name"],
+                model=details["model"],
+                sw_version=details["sw_version"],
+            )
 
 
 def client_device_identifier(coordinator: JellyfinCoordinator, device_key: str) -> str:
@@ -165,12 +227,13 @@ class JellyfinClientEntity(JellyfinEntity):
             # overwriting its name and model with placeholders.
             self._attr_device_info = DeviceInfo(identifiers={(DOMAIN, identifier)})
             return
+        details = client_device_details(session, coordinator.host_name(session))
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, identifier)},
             manufacturer="Jellyfin",
-            model=session.get("Client"),
-            name=session.get("DeviceName") or device_key,
-            sw_version=session.get("ApplicationVersion"),
+            model=details["model"],
+            name=details["name"] or device_key,
+            sw_version=details["sw_version"],
             via_device_id=dr.async_get_device_id_by_identifier(
                 coordinator.hass,
                 (DOMAIN, coordinator.server_id),

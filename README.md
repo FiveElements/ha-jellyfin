@@ -201,4 +201,7 @@ appears in logs, diagnostics or URLs:
 
 Diagnostics hide the token, the user id and client addresses. The media
 player exposes the Jellyfin user name of each session as an attribute; client
-IP addresses are not exposed.
+IP addresses are not exposed. To tell apart clients that share a name (every
+browser is "Chrome"), the address of a client on the **local network** is
+looked up in the local DNS (reverse lookup, cached an hour) and only the
+machine name is shown; public addresses are never looked up.

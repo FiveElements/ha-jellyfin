@@ -55,6 +55,7 @@ from .library import (
     search_types,
     summarize,
 )
+from .useragent import client_browser
 
 PARALLEL_UPDATES = 0
 
@@ -365,11 +366,20 @@ class JellyfinMediaPlayer(JellyfinClientEntity, MediaPlayerEntity):
             "session_id": session.get("Id"),
             "user_name": session.get("UserName"),
             "client": session.get("Client"),
+            "client_version": session.get("ApplicationVersion"),
+            # Tell apart clients sharing a name (every browser tab is
+            # "Chrome"): the machine it runs on. The address itself stays
+            # private (README); only its local DNS name is shown.
+            "host_name": self.coordinator.host_name(session),
+            "last_activity": session.get("LastActivityDate"),
             "queue_size": len(queue),
             "play_method": state.get("PlayMethod"),
             "audio_stream_index": state.get("AudioStreamIndex"),
             "subtitle_stream_index": state.get("SubtitleStreamIndex"),
         }
+        if browser := client_browser(session.get("DeviceId")):
+            attributes["operating_system"] = browser.system
+            attributes["browser"] = browser.label
         if item := self.now_playing:
             attributes["media_type"] = item.get("Type")
         return attributes
