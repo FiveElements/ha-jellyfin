@@ -75,7 +75,7 @@ this (or Ubuntu CI) has run:
 MSYS_NO_PATHCONV=1 docker run --rm \
   -v "$PWD:/src" -v ha-jellyfin-pip:/root/.cache/pip -w /src \
   python:3.14-bookworm bash -lc '
-    pip install -q pytest-homeassistant==2026.11.0b6 pytest-cov==7.1.0 mypy==1.18.2 ruff==0.17.3
+    pip install -q pytest-homeassistant==2026.11.0 pytest-cov==7.1.0 mypy==1.18.2 ruff==0.17.3
     pytest tests -q --cov=custom_components.jellyfin_control --cov-fail-under=95
     mypy custom_components/jellyfin_control
   '
