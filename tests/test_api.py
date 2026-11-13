@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import aiohttp
 import pytest
 
 from custom_components.jellyfin_control.api import (
@@ -18,6 +19,7 @@ from custom_components.jellyfin_control.api import (
 
 from .conftest import (
     BASE_URL,
+    SEGMENT_SIZE,
     TOKEN,
     USER_ID,
     FakeContent,
@@ -171,6 +173,60 @@ async def test_invalid_json_text() -> None:
     c._session = Raw(server)  # type: ignore[assignment]
     with pytest.raises(JellyfinConnectionError):
         await c.public_info()
+
+
+async def test_body_spread_over_many_segments() -> None:
+    """A large answer arrives in pieces; it used to be cut at the first one."""
+    server = FakeJellyfin()
+    server.sessions = [{"Id": f"s{i}", "DeviceName": "x" * 100} for i in range(50)]
+    c = client(server, access_token=TOKEN, user_id=USER_ID)
+    assert len(await c.sessions()) == 50
+
+
+async def test_body_read_stops_past_limit(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The cap holds while reading, not only once the body is in memory."""
+    monkeypatch.setattr(
+        "custom_components.jellyfin_control.api.MAX_RESPONSE_BYTES", 100
+    )
+    server = FakeJellyfin()
+    server.sessions = [{"Id": f"s{i}"} for i in range(50)]
+    c = client(server, access_token=TOKEN, user_id=USER_ID)
+    pieces: list[int] = []
+
+    class Counting(FakeSession):
+        def request(self, *args, **kwargs):  # type: ignore[no-untyped-def]
+            response = super().request(*args, **kwargs)
+            response.content_length = None  # chunked: no length announced
+            original = response.content.iter_chunked
+
+            async def counted(size: int):  # type: ignore[no-untyped-def]
+                async for chunk in original(size):
+                    pieces.append(len(chunk))
+                    yield chunk
+
+            response.content.iter_chunked = counted
+            return response
+
+    c._session = Counting(server)  # type: ignore[assignment]
+    with pytest.raises(JellyfinConnectionError, match="too large"):
+        await c.sessions()
+    assert sum(pieces) <= 100 + SEGMENT_SIZE
+
+
+async def test_body_cut_midway() -> None:
+    server = FakeJellyfin()
+    server.sessions = [{"Id": f"s{i}"} for i in range(50)]
+    c = client(server, access_token=TOKEN, user_id=USER_ID)
+
+    class Dropping(FakeSession):
+        def request(self, *args, **kwargs):  # type: ignore[no-untyped-def]
+            response = super().request(*args, **kwargs)
+            response.content.error = aiohttp.ClientPayloadError("cut")
+            return response
+
+    c._session = Dropping(server)  # type: ignore[assignment]
+    with pytest.raises(JellyfinConnectionError, match="cut"):
+        await c.sessions()
 
 
 async def test_user_required() -> None:

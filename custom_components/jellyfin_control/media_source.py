@@ -16,7 +16,7 @@ from homeassistant.components.media_source import (
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.core import HomeAssistant
 
-from .api import AUDIO_FORMATS, JellyfinError, JsonObject
+from .api import AUDIO_FORMATS, JellyfinError, JellyfinNotFoundError, JsonObject
 from .const import CONF_AUDIO_CODEC, DEFAULT_AUDIO_CODEC, DOMAIN
 from .coordinator import JellyfinConfigEntry
 from .library import Library, LibraryNode
@@ -26,6 +26,21 @@ from .views import signed_image_path, stream_path
 async def async_get_media_source(hass: HomeAssistant) -> MediaSource:
     """Set up the Jellyfin media source."""
     return JellyfinMediaSource(hass)
+
+
+def _unresolvable(err: JellyfinError) -> Unresolvable:
+    """Tell a missing item from a server that did not answer.
+
+    Every client error used to read "item not found", which sent the user
+    looking for a deleted item while the server was in fact unreachable.
+    """
+    if isinstance(err, JellyfinNotFoundError):
+        return Unresolvable(translation_domain=DOMAIN, translation_key="not_found")
+    return Unresolvable(
+        translation_domain=DOMAIN,
+        translation_key="cannot_connect",
+        translation_placeholders={"error": str(err)},
+    )
 
 
 def mime_type(item: JsonObject, audio_codec: str = DEFAULT_AUDIO_CODEC) -> str | None:
@@ -89,9 +104,7 @@ class JellyfinMediaSource(MediaSource):
         try:
             media = await client.item(item_id)
         except JellyfinError as err:
-            raise Unresolvable(
-                translation_domain=DOMAIN, translation_key="not_found"
-            ) from err
+            raise _unresolvable(err) from err
         codec = entry.options.get(CONF_AUDIO_CODEC, DEFAULT_AUDIO_CODEC)
         mime = mime_type(media, codec)
         if mime is None:
@@ -146,9 +159,7 @@ class JellyfinMediaSource(MediaSource):
                 else await library.root(entry.title)
             )
         except JellyfinError as err:
-            raise Unresolvable(
-                translation_domain=DOMAIN, translation_key="not_found"
-            ) from err
+            raise _unresolvable(err) from err
         return self._to_source(entry, node, with_children=True)
 
     def _to_source(

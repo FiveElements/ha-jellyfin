@@ -30,15 +30,16 @@
         }
       },
       "auth": {
-        "title": "Sign in to {server}",
-        "description": "Choose how Home Assistant signs in. Only an access token is stored; the password is never kept.",
+        "title": "Sign in",
+        "description": "Choose how Home Assistant signs in to {server}. Only an access token is stored; the password is never kept.",
         "menu_options": {
           "password": "Username and password",
           "quick_connect": "Quick Connect code"
         }
       },
       "password": {
-        "title": "Sign in to {server}",
+        "title": "Sign in",
+        "description": "Sign in to {server} with a Jellyfin account.",
         "data": {
           "username": "Username",
           "password": "Password"

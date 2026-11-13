@@ -388,6 +388,10 @@ PUBLIC_PATHS = frozenset(
 )
 
 
+# Bytes per chunk the fake reader hands over, far below any real chunk size.
+SEGMENT_SIZE = 64
+
+
 class FakeContent:
     """Stand-in for aiohttp's StreamReader."""
 
@@ -401,9 +405,14 @@ class FakeContent:
         return self._data if n < 0 else self._data[:n]
 
     async def iter_chunked(self, size: int) -> AsyncIterator[bytes]:
-        """Yield the body in chunks."""
-        for start in range(0, len(self._data), max(1, size)):
-            yield self._data[start : start + size]
+        """Yield the body in short pieces, as TCP segments arrive.
+
+        Handing over the whole body at once hid a client that kept only
+        the first piece of every large response.
+        """
+        step = max(1, min(size, SEGMENT_SIZE))
+        for start in range(0, len(self._data), step):
+            yield self._data[start : start + step]
             if self.error is not None:
                 raise self.error
 

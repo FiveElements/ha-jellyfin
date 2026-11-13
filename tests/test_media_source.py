@@ -12,7 +12,7 @@ from homeassistant.components.media_source import Unresolvable
 from homeassistant.core import HomeAssistant
 from homeassistant.setup import async_setup_component
 
-from .conftest import TOKEN, FakeJellyfin
+from .conftest import TOKEN, FakeJellyfin, connection_error
 
 
 @pytest.fixture(autouse=True)
@@ -71,10 +71,17 @@ async def test_browse_and_resolve(
 async def test_errors(
     hass: HomeAssistant, fake: FakeJellyfin, loaded: MockConfigEntry
 ) -> None:
-    with pytest.raises(Unresolvable):
+    with pytest.raises(Unresolvable) as missing:
         await media_source.async_resolve_media(
             hass, f"media-source://{DOMAIN}/{loaded.entry_id}/missing", None
         )
+    assert missing.value.translation_key == "not_found"
+    # An unreachable server is not reported as a missing item.
+    fake.set("GET", "/UserViews", connection_error())
+    with pytest.raises(Unresolvable) as down:
+        await media_source.async_browse_media(hass, f"media-source://{DOMAIN}")
+    assert down.value.translation_key == "cannot_connect"
+    fake.overrides.clear()
     with pytest.raises(Unresolvable):
         await media_source.async_resolve_media(
             hass, f"media-source://{DOMAIN}/{loaded.entry_id}/photo1", None

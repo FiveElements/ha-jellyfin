@@ -15,6 +15,7 @@ from pytest_homeassistant.components.diagnostics import (
 from pytest_homeassistant.typing import ClientSessionGenerator
 
 from custom_components.jellyfin_control import async_remove_config_entry_device
+from custom_components.jellyfin_control.api import READ_CHUNK_SIZE as CHUNK_SIZE
 from custom_components.jellyfin_control.const import (
     CONF_USER_ID,
     DOMAIN,
@@ -22,11 +23,7 @@ from custom_components.jellyfin_control.const import (
 )
 from custom_components.jellyfin_control.library import ImageRef
 from custom_components.jellyfin_control.media_source import mime_type
-from custom_components.jellyfin_control.views import (
-    CHUNK_SIZE,
-    signed_image_path,
-    stream_path,
-)
+from custom_components.jellyfin_control.views import signed_image_path, stream_path
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.const import ATTR_ENTITY_ID, CONF_PASSWORD, CONF_USERNAME
 from homeassistant.core import HomeAssistant
