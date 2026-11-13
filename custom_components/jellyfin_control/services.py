@@ -91,6 +91,26 @@ SERVICES: tuple[tuple[str, str, Any, int | None, SupportsResponse], ...] = (
         SupportsResponse.NONE,
     ),
     (
+        "seek_chapter",
+        "async_seek_chapter",
+        _schema(
+            {
+                probatio.Required("chapter"): probatio.All(
+                    probatio.Coerce(str), probatio.Lower, probatio.Strip
+                )
+            }
+        ),
+        MediaPlayerEntityFeature.SEEK,
+        SupportsResponse.NONE,
+    ),
+    (
+        "get_chapters",
+        "async_get_chapters",
+        _schema({}),
+        None,
+        SupportsResponse.ONLY,
+    ),
+    (
         "send_message",
         "async_send_message",
         _schema(

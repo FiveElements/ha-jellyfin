@@ -105,6 +105,7 @@ them.
 | `media_source.py` | Library as a media source; identifiers are `<entry_id>/<node_id>`; resolves to a `views.py` stream path. |
 | `views.py` | Authenticated HA views relaying artwork and streams (Range pass-through, 404/416 passed, other errors 502); `signed_image_path()` and `stream_path()`. |
 | `services.py` | Entity action registration on the media player domain. |
+| `llm_api.py` | LLM API "Jellyfin Control" (registered in `async_setup`): one tool per control, for conversation agents and the MCP server. Tools call the integration's actions as the requesting user and only target media players exposed to Assist; errors return `ToolResult(error=True)` so the model can retry. |
 | `config_flow.py` | Server, then password or Quick Connect; reauth (another account aborts with `wrong_account` after revoking the new token); reconfigure; options (reload on change). |
 
 `entry.runtime_data` is `JellyfinData(client, coordinator)`.

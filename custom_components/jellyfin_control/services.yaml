@@ -191,6 +191,26 @@ set_user_data:
       selector:
         boolean:
 
+seek_chapter:
+  target:
+    entity:
+      integration: jellyfin_control
+      domain: media_player
+      supported_features:
+        - media_player.MediaPlayerEntityFeature.SEEK
+  fields:
+    chapter:
+      required: true
+      example: next
+      selector:
+        text:
+
+get_chapters:
+  target:
+    entity:
+      integration: jellyfin_control
+      domain: media_player
+
 get_queue:
   target:
     entity:

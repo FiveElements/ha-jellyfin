@@ -150,6 +150,15 @@
     }
   },
   "exceptions": {
+    "nothing_playing": {
+      "message": "Rien n'est en lecture sur ce client Jellyfin."
+    },
+    "no_chapters": {
+      "message": "L'élément en lecture n'a pas de chapitres."
+    },
+    "no_such_chapter": {
+      "message": "Il n'y a pas de chapitre « {chapter} » dans l'élément en lecture."
+    },
     "cannot_connect": {
       "message": "Impossible de joindre le serveur Jellyfin : {error}"
     },
@@ -333,6 +342,20 @@
           "description": "Ajouter aux favoris (activé) ou retirer (désactivé)."
         }
       }
+    },
+    "seek_chapter": {
+      "name": "Aller à un chapitre",
+      "description": "Passe au chapitre suivant ou précédent de l'élément en lecture, ou à un chapitre par son numéro.",
+      "fields": {
+        "chapter": {
+          "name": "Chapitre",
+          "description": "next (suivant), previous (précédent), ou le numéro d'un chapitre donné par Lister les chapitres (0 est le premier)."
+        }
+      }
+    },
+    "get_chapters": {
+      "name": "Lister les chapitres",
+      "description": "Renvoie les chapitres de l'élément en lecture (numéro, nom, début en secondes) et le chapitre en cours."
     },
     "get_queue": {
       "name": "Obtenir la file",
