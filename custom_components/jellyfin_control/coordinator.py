@@ -2,8 +2,12 @@
 
 from __future__ import annotations
 
+import asyncio
 from dataclasses import dataclass
 from datetime import timedelta
+import ipaddress
+import socket
+import time
 from typing import Any, override
 
 from homeassistant.config_entries import ConfigEntry
@@ -28,6 +32,11 @@ from .const import (
 
 type JellyfinConfigEntry = ConfigEntry[JellyfinData]
 
+# Machine names are looked up again after an hour (DHCP leases move), and a
+# lookup never holds the poll longer than this.
+HOST_NAME_TTL = 3600.0
+HOST_NAME_TIMEOUT = 3.0
+
 
 @dataclass(slots=True)
 class JellyfinData:
@@ -44,6 +53,33 @@ def session_key(session: JsonObject) -> str:
     so entities keyed on it survive an app restart instead of piling up.
     """
     return str(session.get("DeviceId") or session["Id"])
+
+
+def local_address(remote_end_point: object) -> str | None:
+    """Return the client address when it is on the local network.
+
+    Only local addresses are looked up: a public one would send each
+    viewer's address to an outside DNS server and name an ISP router, not
+    the machine.
+    """
+    try:
+        address = ipaddress.ip_address(str(remote_end_point or "").strip("[]"))
+    except ValueError:
+        return None
+    if isinstance(address, ipaddress.IPv6Address) and address.ipv4_mapped:
+        address = address.ipv4_mapped
+    if address.is_private or address.is_link_local:
+        return str(address)
+    return None
+
+
+def _lookup_host_name(address: str) -> str | None:
+    """Return the reverse DNS name of an address (blocking)."""
+    try:
+        name = socket.gethostbyaddr(address)[0]
+    except OSError, UnicodeError:
+        return None
+    return None if name == address else name
 
 
 def supported_commands(session: JsonObject) -> list[str]:
@@ -98,6 +134,8 @@ class JellyfinCoordinator(DataUpdateCoordinator[dict[str, JsonObject]]):
         self.own_device_id: str = config_entry.data[CONF_CLIENT_DEVICE_ID]
         # Devices seen since setup: entities are created once per device.
         self._streams: dict[str, list[JsonObject]] = {}
+        # address -> (reverse DNS name or None, monotonic expiry)
+        self._host_names: dict[str, tuple[str | None, float]] = {}
 
     @override
     async def _async_update_data(self) -> dict[str, JsonObject]:
@@ -126,7 +164,42 @@ class JellyfinCoordinator(DataUpdateCoordinator[dict[str, JsonObject]]):
             if current is None or _activity(session) >= _activity(current):
                 result[key] = session
         await self._add_missing_streams(result)
+        await self._resolve_host_names(result.values())
         return result
+
+    async def _resolve_host_names(self, sessions: Any) -> None:
+        """Look up the machine name of new local client addresses.
+
+        Jellyfin only knows a browser as "Chrome"; the name its address has
+        in the local DNS is what tells the office PC from the living room.
+        """
+        now = time.monotonic()
+        pending = {
+            address
+            for session in sessions
+            if (address := local_address(session.get("RemoteEndPoint")))
+            and self._host_names.get(address, (None, 0.0))[1] <= now
+        }
+        if not pending:
+            return
+        jobs = {
+            address: self.hass.async_add_executor_job(_lookup_host_name, address)
+            for address in pending
+        }
+        # wait() leaves a slow lookup running instead of cancelling it; it is
+        # simply tried again on a later poll.
+        await asyncio.wait(jobs.values(), timeout=HOST_NAME_TIMEOUT)
+        for address, job in jobs.items():
+            if not job.done():
+                LOGGER.debug("Reverse DNS of %s timed out", address)
+                self._host_names[address] = (None, now + HOST_NAME_TIMEOUT * 20)
+            else:
+                self._host_names[address] = (job.result(), now + HOST_NAME_TTL)
+
+    def host_name(self, session: JsonObject) -> str | None:
+        """Return the local DNS name of the machine a session runs on."""
+        address = local_address(session.get("RemoteEndPoint"))
+        return self._host_names.get(address, (None, 0.0))[0] if address else None
 
     async def _add_missing_streams(self, sessions: dict[str, JsonObject]) -> None:
         """Fill in the tracks of items the server reported without them.

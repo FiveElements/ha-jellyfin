@@ -490,6 +490,21 @@ def auto_enable_custom_integrations(enable_custom_integrations: Any) -> None:
     """Make the custom component loadable in every test."""
 
 
+# Reverse DNS answers of the local network, by address.
+HOST_NAMES: dict[str, str] = {}
+
+
+@pytest.fixture(autouse=True)
+def fake_reverse_dns() -> Generator[dict[str, str]]:
+    """Answer machine-name lookups from HOST_NAMES, never from the real DNS."""
+    HOST_NAMES.clear()
+    with patch(
+        "custom_components.jellyfin_control.coordinator._lookup_host_name",
+        side_effect=HOST_NAMES.get,
+    ):
+        yield HOST_NAMES
+
+
 @pytest.fixture
 def hass_config_dir(hass_tmp_config_dir: str) -> str:
     """Give each test its own writable config directory."""

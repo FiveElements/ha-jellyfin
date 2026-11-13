@@ -22,7 +22,11 @@ from .const import (
     PLATFORMS,
 )
 from .coordinator import JellyfinConfigEntry, JellyfinCoordinator, JellyfinData
-from .entity import client_device_identifier, server_device_info
+from .entity import (
+    async_sync_client_devices,
+    client_device_identifier,
+    server_device_info,
+)
 from .services import async_setup_services
 from .views import async_register_views
 
@@ -96,6 +100,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: JellyfinConfigEntry) -> 
         config_entry_id=entry.entry_id, **server_device_info(coordinator)
     )
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+    async_sync_client_devices(coordinator)
+    entry.async_on_unload(
+        coordinator.async_add_listener(lambda: async_sync_client_devices(coordinator))
+    )
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: JellyfinConfigEntry) -> None:
