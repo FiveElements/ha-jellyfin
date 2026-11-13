@@ -58,17 +58,22 @@ def test_one_input(data: bytes) -> None:
     device = fdp.ConsumeUnicodeNoSurrogates(60)
 
     client = _client(device, token)
-    url = client.build_url(*segments)
+    header = client.authorization()
+    assert HEADER.fullmatch(header), header
+
+    try:
+        url = client.build_url(*segments)
+    except api.JellyfinNotFoundError:
+        # Only an empty identifier is refused; it would name another route.
+        assert "" in segments, segments
+        return
     assert url.host == "jellyfin.local"
     path = url.raw_path
     assert path.startswith("/jf/")
     parts = path[len("/jf/") :].split("/")
     assert len(parts) == len(segments), (segments, path)
     for part in parts:
-        assert part not in (".", ".."), (segments, path)
-
-    header = client.authorization()
-    assert HEADER.fullmatch(header), header
+        assert part not in ("", ".", ".."), (segments, path)
 
 
 def main() -> None:

@@ -327,7 +327,7 @@ class FakeJellyfin:
             if (wanted := call.headers.get("Range")) and wanted.startswith("bytes="):
                 start = int(wanted[6:].split("-")[0])
                 if start >= len(data):
-                    return 416, None
+                    return 416, None, {"Content-Range": f"bytes */{len(data)}"}
                 return (
                     206,
                     data[start:],

@@ -5,7 +5,11 @@ from __future__ import annotations
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.const import CONF_URL, CONF_VERIFY_SSL, __version__ as ha_version
 from homeassistant.core import HomeAssistant
-from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
+from homeassistant.exceptions import (
+    ConfigEntryAuthFailed,
+    ConfigEntryError,
+    ConfigEntryNotReady,
+)
 from homeassistant.helpers import config_validation as cv, device_registry as dr
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.typing import ConfigType
@@ -79,6 +83,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: JellyfinConfigEntry) -> 
     client = entry_client(hass, entry)
     try:
         server = await client.public_info()
+        # The address may now reach another server (DHCP lease, DNS, proxy
+        # change): the token must not be sent to it.
+        expected = entry.data.get(CONF_SERVER_ID) or entry.unique_id
+        if expected and server.server_id != expected:
+            raise ConfigEntryError(
+                translation_domain=DOMAIN,
+                translation_key="wrong_server",
+                translation_placeholders={"server": server.name},
+            )
         user = await client.current_user()
     except JellyfinAuthError as err:
         raise ConfigEntryAuthFailed(

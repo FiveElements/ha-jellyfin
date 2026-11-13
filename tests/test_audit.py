@@ -23,7 +23,11 @@ from custom_components.jellyfin_control.const import (
 )
 from custom_components.jellyfin_control.library import ImageRef
 from custom_components.jellyfin_control.media_source import mime_type
-from custom_components.jellyfin_control.views import signed_image_path, stream_path
+from custom_components.jellyfin_control.views import (
+    safe_media_type,
+    signed_image_path,
+    stream_path,
+)
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.const import ATTR_ENTITY_ID, CONF_PASSWORD, CONF_USERNAME
 from homeassistant.core import HomeAssistant
@@ -37,6 +41,7 @@ from .conftest import (
     TOKEN,
     USER_ID,
     FakeJellyfin,
+    FakeResponse,
     connection_error,
     make_session,
     refresh,
@@ -316,6 +321,10 @@ async def test_missing_tracks_are_fetched_once(
         await refresh(hass, loaded)
         assert hass.states.get("select.living_room_audio_track").state == "unavailable"
         coordinator = loaded.runtime_data.coordinator
+        assert set(coordinator._streams) == set()
+        # ...and is retried: a timeout at start no longer costs the whole film.
+        fake.overrides.clear()
+        await refresh(hass, loaded)
         assert set(coordinator._streams) == {"ep2"}
     finally:
         del ITEMS["ep1"]["MediaStreams"]
@@ -411,6 +420,43 @@ async def test_image_view(
     assert (await client.get(other)).status == 404
 
 
+async def test_relayed_types_cannot_run_script(
+    hass: HomeAssistant,
+    hass_client: ClientSessionGenerator,
+    fake: FakeJellyfin,
+    loaded: MockConfigEntry,
+) -> None:
+    """Bytes from Jellyfin are served from HA's origin: no HTML, no SVG."""
+    client = await hass_client()
+    path = signed_image_path(hass, loaded.entry_id, ImageRef("mov1", "Primary", "t1"))
+    response = await client.get(path)
+    assert response.headers["Content-Type"] == "image/png"
+    assert response.headers["X-Content-Type-Options"] == "nosniff"
+
+    original = FakeResponse.__init__
+
+    def as_html(self: FakeResponse, *args: Any, **kwargs: Any) -> None:
+        original(self, *args, **kwargs)
+        self.content_type = "text/html"
+        self.headers["Content-Type"] = "text/html"
+
+    with patch.object(FakeResponse, "__init__", as_html):
+        assert (await client.get(path)).status == 502
+        video = await client.get(stream_path(loaded.entry_id, "mov1"))
+        assert video.status == 200
+        assert video.headers["Content-Type"] == "application/octet-stream"
+        audio = await client.get(stream_path(loaded.entry_id, "song1"))
+        assert audio.headers["Content-Type"] == "audio/mpeg"
+
+
+def test_safe_media_type() -> None:
+    assert safe_media_type("image/jpeg; q=1", ("image/",)) == "image/jpeg"
+    assert safe_media_type("IMAGE/PNG", ("image/",)) == "image/png"
+    assert safe_media_type("image/svg+xml", ("image/",)) is None
+    assert safe_media_type("text/html", ("image/",)) is None
+    assert safe_media_type(None, ("audio/", "video/")) is None
+
+
 async def test_views_require_auth(
     hass: HomeAssistant,
     hass_client_no_auth: ClientSessionGenerator,
@@ -434,6 +480,8 @@ async def test_stream_view(
     assert response.status == 200
     assert await response.read() == fake.stream
     assert response.headers["Content-Type"] == "video/x-matroska"
+    assert response.headers["X-Content-Type-Options"] == "nosniff"
+    assert response.headers["Content-Security-Policy"] == "sandbox"
     upstream = fake.last("GET", "/Videos/mov1/stream")
     assert upstream.params["MediaSourceId"] == "ms2"
     assert TOKEN in upstream.headers["Authorization"]
@@ -446,6 +494,7 @@ async def test_stream_view(
 
     response = await client.get(video, headers={"Range": "bytes=99-"})
     assert response.status == 416
+    assert response.headers["Content-Range"] == "bytes */10"
 
     audio = await client.get(stream_path(loaded.entry_id, "song1"))
     assert audio.status == 200

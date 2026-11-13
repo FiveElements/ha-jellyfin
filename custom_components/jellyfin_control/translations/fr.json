@@ -4,17 +4,19 @@
       "already_configured": "Ce serveur Jellyfin est déjà configuré.",
       "reauth_successful": "La réauthentification a réussi.",
       "reconfigure_successful": "La reconfiguration a réussi.",
-      "wrong_account": "Vous vous êtes connecté avec un autre utilisateur Jellyfin. Utilisez le compte de cette entrée, ou ajoutez une nouvelle entrée.",
+      "wrong_account": "Vous êtes connecté avec un autre utilisateur Jellyfin. Connectez-vous avec le compte utilisé pour configurer cette entrée.",
       "unique_id_mismatch": "Cette adresse désigne un autre serveur Jellyfin.",
       "cannot_connect": "Impossible de joindre le serveur Jellyfin.",
-      "quick_connect_disabled": "Quick Connect est désactivé sur ce serveur. Activez-le dans le tableau de bord Jellyfin ou connectez-vous avec un mot de passe."
+      "quick_connect_disabled": "Quick Connect est désactivé sur ce serveur. Activez-le dans le tableau de bord Jellyfin ou connectez-vous avec un mot de passe.",
+      "already_in_progress": "Une configuration de ce serveur est déjà en cours."
     },
     "error": {
       "cannot_connect": "Connexion impossible. Vérifiez l'adresse et que le serveur fonctionne.",
       "invalid_auth": "Nom d'utilisateur ou mot de passe invalide.",
       "unknown": "Erreur inattendue.",
       "quick_connect_pending": "Le code n'a pas encore été approuvé. Approuvez-le dans une application Jellyfin connectée, puis validez à nouveau.",
-      "quick_connect_expired": "Le code a expiré ; un nouveau code est affiché ci-dessous."
+      "quick_connect_expired": "Le code a expiré ; un nouveau code est affiché ci-dessous.",
+      "quick_connect_refused": "Le serveur a refusé le code Quick Connect. Demandez un nouveau code et approuvez-le à nouveau."
     },
     "step": {
       "user": {
@@ -177,6 +179,9 @@
     },
     "no_server": {
       "message": "Aucun serveur Jellyfin n'est chargé."
+    },
+    "wrong_server": {
+      "message": "L'adresse mène désormais à un autre serveur Jellyfin ({server}) ; le jeton d'accès n'a pas été envoyé. Reconfigurez l'entrée avec la bonne adresse."
     }
   },
   "services": {

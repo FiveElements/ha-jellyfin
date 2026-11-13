@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from functools import partial
+import random
 from typing import Any, cast, override
 
 from homeassistant.components import media_source
@@ -149,10 +150,9 @@ class JellyfinMediaPlayer(JellyfinClientEntity, MediaPlayerEntity):
             self._attr_media_position_updated_at = dt_util.utcnow() if item else None
             self._last_position = marker
         self._attr_media_position = position
-        if volume := state.get("VolumeLevel"):
-            self._attr_volume_level = float(volume) / 100
-        elif volume == 0:
-            self._attr_volume_level = 0.0
+        # Cleared when absent: the previous session's level stayed displayed.
+        volume = state.get("VolumeLevel")
+        self._attr_volume_level = None if volume is None else float(volume) / 100
         self._attr_is_volume_muted = bool(state.get("IsMuted"))
         self._attr_repeat = REPEAT_FROM_JELLYFIN.get(
             str(state.get("RepeatMode")), RepeatMode.OFF
@@ -424,6 +424,12 @@ class JellyfinMediaPlayer(JellyfinClientEntity, MediaPlayerEntity):
     async def async_seek_relative(self, seconds: float) -> None:
         """Seek forward or backward from the current position."""
         current = int(self.play_state.get("PositionTicks") or 0)
+        # The position is as old as the last poll (up to the scan interval):
+        # while playing, add the time elapsed since, as the frontend does.
+        updated = self._attr_media_position_updated_at
+        if self.state == MediaPlayerState.PLAYING and updated is not None:
+            elapsed = (dt_util.utcnow() - updated).total_seconds()
+            current += int(max(0.0, elapsed) * TICKS_PER_SECOND)
         target = current + int(seconds * TICKS_PER_SECOND)
         if duration := (self.now_playing or {}).get("RunTimeTicks"):
             target = min(target, int(duration))
@@ -521,12 +527,19 @@ class JellyfinMediaPlayer(JellyfinClientEntity, MediaPlayerEntity):
     ) -> None:
         """Send items to the client, expanding folders into their contents."""
         session_id = self.session_id
+        # An empty id would reach /Items/ (the query endpoint), not an item.
+        item_ids = [item_id for item_id in item_ids if item_id]
         ids: list[str] = []
         for item_id in item_ids:
             ids += await call_api(
                 partial(self._library.playable_ids, item_id, shuffle=shuffle)
             )
-        ids = list(dict.fromkeys(ids))[:MAX_QUEUE_ITEMS]
+        ids = list(dict.fromkeys(ids))
+        if shuffle:
+            # playable_ids only shuffles inside a folder: single items and the
+            # order between folders stayed as given.
+            random.shuffle(ids)
+        ids = ids[:MAX_QUEUE_ITEMS]
         if not ids:
             raise ServiceValidationError(
                 translation_domain=DOMAIN, translation_key="nothing_to_play"

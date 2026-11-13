@@ -74,6 +74,8 @@ def test_secrets_are_not_in_repr() -> None:
 def test_path_segments_cannot_escape() -> None:
     url = client(FakeJellyfin()).build_url("Items", "../System/Restart")
     assert url.raw_path == "/Items/..%2FSystem%2FRestart"
+    with pytest.raises(JellyfinNotFoundError):
+        client(FakeJellyfin()).build_url("Items", "")
     url = client(FakeJellyfin()).build_url("Items", "..", ".")
     assert url.raw_path == "/Items/%2E%2E/%2E"
     url = client(FakeJellyfin()).build_url("Items", params={"a": True, "b": 2})
