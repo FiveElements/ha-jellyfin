@@ -1,0 +1,357 @@
+{
+  "config": {
+    "abort": {
+      "already_configured": "This Jellyfin server is already configured.",
+      "reauth_successful": "Re-authentication was successful.",
+      "reconfigure_successful": "Reconfiguration was successful.",
+      "unique_id_mismatch": "This address points to a different Jellyfin server.",
+      "cannot_connect": "Failed to connect to the Jellyfin server.",
+      "quick_connect_disabled": "Quick Connect is disabled on this server. Enable it in the Jellyfin dashboard or sign in with a password."
+    },
+    "error": {
+      "cannot_connect": "Failed to connect. Check the address and that the server is running.",
+      "invalid_auth": "Invalid username or password.",
+      "unknown": "Unexpected error.",
+      "quick_connect_pending": "The code has not been approved yet. Approve it in a signed-in Jellyfin app, then submit again.",
+      "quick_connect_expired": "The code expired; a new one is shown below."
+    },
+    "step": {
+      "user": {
+        "title": "Jellyfin server",
+        "description": "Enter the address of your Jellyfin server.",
+        "data": {
+          "url": "URL",
+          "verify_ssl": "Verify SSL certificate"
+        },
+        "data_description": {
+          "url": "For example http://192.168.1.10:8096. A /jellyfin base path behind a reverse proxy is detected automatically.",
+          "verify_ssl": "Turn off only for a server using a self-signed certificate."
+        }
+      },
+      "auth": {
+        "title": "Sign in to {server}",
+        "description": "Choose how Home Assistant signs in. Only an access token is stored; the password is never kept.",
+        "menu_options": {
+          "password": "Username and password",
+          "quick_connect": "Quick Connect code"
+        }
+      },
+      "password": {
+        "title": "Sign in to {server}",
+        "data": {
+          "username": "Username",
+          "password": "Password"
+        },
+        "data_description": {
+          "username": "Use an administrator to control every client and scan libraries.",
+          "password": "Exchanged once for an access token, then discarded."
+        }
+      },
+      "quick_connect": {
+        "title": "Quick Connect",
+        "description": "In a Jellyfin app already signed in to {server}, open Settings > Quick Connect and enter the code **{code}**. Then submit this form."
+      },
+      "reconfigure": {
+        "title": "Change the server address",
+        "data": {
+          "url": "URL",
+          "verify_ssl": "Verify SSL certificate"
+        },
+        "data_description": {
+          "url": "New address of the same Jellyfin server.",
+          "verify_ssl": "Turn off only for a server using a self-signed certificate."
+        }
+      }
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "data": {
+          "scan_interval": "Polling interval",
+          "audio_codec": "Audio streaming codec"
+        },
+        "data_description": {
+          "scan_interval": "How often the sessions are read from the server.",
+          "audio_codec": "Codec used when music from the library is streamed to another Home Assistant player."
+        }
+      }
+    }
+  },
+  "selector": {
+    "audio_codec": {
+      "options": {
+        "aac": "AAC",
+        "mp3": "MP3",
+        "opus": "Opus",
+        "flac": "FLAC"
+      }
+    },
+    "enqueue": {
+      "options": {
+        "play": "Play now",
+        "next": "Play next",
+        "add": "Add to the queue",
+        "replace": "Replace the queue"
+      }
+    },
+    "media_types": {
+      "options": {
+        "movie": "Movies",
+        "series": "Series",
+        "episode": "Episodes",
+        "music_album": "Albums",
+        "music_artist": "Artists",
+        "audio": "Songs",
+        "playlist": "Playlists",
+        "box_set": "Collections",
+        "tv_channel": "TV channels"
+      }
+    }
+  },
+  "entity": {
+    "button": {
+      "refresh_library": {
+        "name": "Scan libraries"
+      }
+    },
+    "remote": {
+      "remote": {
+        "name": "Remote"
+      }
+    },
+    "select": {
+      "audio_track": {
+        "name": "Audio track"
+      },
+      "subtitle_track": {
+        "name": "Subtitles",
+        "state": {
+          "off": "Off"
+        }
+      }
+    },
+    "sensor": {
+      "watching": {
+        "name": "Active clients",
+        "unit_of_measurement": "clients"
+      },
+      "sessions": {
+        "name": "Connected clients",
+        "unit_of_measurement": "clients"
+      }
+    }
+  },
+  "exceptions": {
+    "cannot_connect": {
+      "message": "Cannot reach the Jellyfin server: {error}"
+    },
+    "invalid_auth": {
+      "message": "The Jellyfin access token was refused. Sign in again."
+    },
+    "forbidden": {
+      "message": "This Jellyfin user is not allowed to do that (administrator rights are required)."
+    },
+    "not_found": {
+      "message": "The Jellyfin item was not found."
+    },
+    "session_unavailable": {
+      "message": "The Jellyfin client is not connected."
+    },
+    "command_unsupported": {
+      "message": "The Jellyfin client does not support the {command} command."
+    },
+    "nothing_to_play": {
+      "message": "Nothing playable was found."
+    },
+    "unsupported_media_source": {
+      "message": "Jellyfin clients can only play items of their own library, not {media_id}."
+    },
+    "invalid_option": {
+      "message": "Unknown track: {option}."
+    },
+    "no_server": {
+      "message": "No Jellyfin server is loaded."
+    }
+  },
+  "services": {
+    "play_media_shuffle": {
+      "name": "Play media shuffled",
+      "description": "Plays an item or folder shuffled, replacing the queue.",
+      "fields": {
+        "media": {
+          "name": "Media",
+          "description": "The media to play."
+        }
+      }
+    },
+    "play_items": {
+      "name": "Play items",
+      "description": "Plays or queues library items; folders, series, albums and playlists are expanded.",
+      "fields": {
+        "item_ids": {
+          "name": "Item IDs",
+          "description": "Jellyfin item IDs, played in this order."
+        },
+        "enqueue": {
+          "name": "Enqueue",
+          "description": "Play now or add to the queue."
+        },
+        "shuffle": {
+          "name": "Shuffle",
+          "description": "Shuffle the items before sending them."
+        },
+        "start_index": {
+          "name": "Start index",
+          "description": "Position in the list to start from."
+        },
+        "start_position": {
+          "name": "Start position",
+          "description": "Where to start in the first item."
+        }
+      }
+    },
+    "play_instant_mix": {
+      "name": "Play instant mix",
+      "description": "Plays a mix the server builds from a song, album, artist or genre.",
+      "fields": {
+        "item_id": {
+          "name": "Item ID",
+          "description": "Song, album, artist or genre to start from."
+        }
+      }
+    },
+    "seek_relative": {
+      "name": "Seek relative",
+      "description": "Moves forward or backward from the current position.",
+      "fields": {
+        "seconds": {
+          "name": "Seconds",
+          "description": "Positive to move forward, negative to move back."
+        }
+      }
+    },
+    "send_message": {
+      "name": "Send message",
+      "description": "Shows a message on the client screen.",
+      "fields": {
+        "message": {
+          "name": "Message",
+          "description": "Text to show."
+        },
+        "title": {
+          "name": "Title",
+          "description": "Header of the message."
+        },
+        "timeout": {
+          "name": "Timeout",
+          "description": "How long the message stays visible."
+        }
+      }
+    },
+    "send_text": {
+      "name": "Send text",
+      "description": "Types text into the focused field of the client (search box).",
+      "fields": {
+        "text": {
+          "name": "Text",
+          "description": "Text to type."
+        }
+      }
+    },
+    "send_command": {
+      "name": "Send command",
+      "description": "Sends any Jellyfin general command with arguments.",
+      "fields": {
+        "command": {
+          "name": "Command",
+          "description": "General command name, for example ToggleOsdMenu or SetVolume."
+        },
+        "arguments": {
+          "name": "Arguments",
+          "description": "Arguments of the command."
+        }
+      }
+    },
+    "display_content": {
+      "name": "Display content",
+      "description": "Opens the page of an item on the client.",
+      "fields": {
+        "item_id": {
+          "name": "Item ID",
+          "description": "Item to show."
+        }
+      }
+    },
+    "set_audio_stream": {
+      "name": "Set audio track",
+      "description": "Switches the audio track of the playing item.",
+      "fields": {
+        "index": {
+          "name": "Stream index",
+          "description": "Jellyfin index of the audio stream."
+        }
+      }
+    },
+    "set_subtitle_stream": {
+      "name": "Set subtitles",
+      "description": "Switches the subtitles of the playing item.",
+      "fields": {
+        "index": {
+          "name": "Stream index",
+          "description": "Jellyfin index of the subtitle stream, -1 to turn subtitles off."
+        }
+      }
+    },
+    "set_user_data": {
+      "name": "Set played or favorite",
+      "description": "Marks an item played or unplayed, favorite or not.",
+      "fields": {
+        "item_id": {
+          "name": "Item ID",
+          "description": "Item to update."
+        },
+        "played": {
+          "name": "Played",
+          "description": "Mark as played (on) or unplayed (off)."
+        },
+        "favorite": {
+          "name": "Favorite",
+          "description": "Add to (on) or remove from (off) favorites."
+        }
+      }
+    },
+    "get_queue": {
+      "name": "Get queue",
+      "description": "Returns the play queue of the client."
+    },
+    "browse_library": {
+      "name": "Browse library",
+      "description": "Returns the children of a library folder.",
+      "fields": {
+        "parent_id": {
+          "name": "Parent ID",
+          "description": "Folder, series, album or special:resume, special:next_up, special:latest, special:favorites. Empty for the root."
+        }
+      }
+    },
+    "search_library": {
+      "name": "Search library",
+      "description": "Searches the library and returns the matching items.",
+      "fields": {
+        "query": {
+          "name": "Query",
+          "description": "Text to look for."
+        },
+        "media_types": {
+          "name": "Media types",
+          "description": "Restrict to these types."
+        },
+        "limit": {
+          "name": "Limit",
+          "description": "Maximum number of results."
+        }
+      }
+    }
+  }
+}

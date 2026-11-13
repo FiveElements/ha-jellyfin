@@ -1,0 +1,107 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    name: Ruff
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.14"
+      # Linting needs ruff only; installing the Home Assistant test harness
+      # here would add minutes for nothing.
+      - run: pip install --require-hashes -r requirements-lint.txt
+      - name: Lint
+        run: ruff check custom_components tests fuzz scripts
+      - name: Format check
+        run: ruff format --check custom_components tests fuzz scripts
+
+  test:
+    name: Tests (HA ${{ matrix.ha }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # pytest-homeassistant, Home Assistant's own test package, pins exactly
+        # the Home Assistant release that shares its version, so the harness
+        # version is how a Home Assistant version gets tested. The oldest entry
+        # here is what hacs.json declares as the minimum; add a newer one
+        # alongside it to test a version before raising the floor.
+        # pytest-homeassistant-custom-component stopped at 2026.10: it imported
+        # httpx before Home Assistant could alias it, and 2026.11 refuses that.
+        include:
+          - ha: "2026.11.0"
+            harness: "2026.11.0b6"
+            coverage: true
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.14"
+      # Not hash-locked, unlike lint, docs and fuzz: the lock had to carry Home
+      # Assistant's exact pins, so every CVE in a package HA pins became an
+      # alert here that no change of ours could fix.
+      - name: Install
+        env:
+          HARNESS: ${{ matrix.harness }}
+        run: |
+          pip install "pytest-homeassistant==$HARNESS"
+          pip install pytest-cov==7.1.0 mypy==1.18.2
+      - name: Test
+        run: |
+          pytest tests \
+            --cov=custom_components.jellyfin_control \
+            --cov-report=term-missing \
+            --cov-report=xml \
+            --cov-fail-under=95 \
+            -q
+      - name: Type check
+        run: mypy custom_components/jellyfin_control
+      - name: Upload coverage
+        if: matrix.coverage
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: coverage
+          path: coverage.xml
+
+  # The one check branch protection requires for the suite. Matrix jobs are
+  # named after their Home Assistant version, so requiring them directly meant
+  # every floor bump left PRs waiting on a check that would never report.
+  tests:
+    name: Tests
+    needs: test
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Every matrix row passed
+        env:
+          RESULT: ${{ needs.test.result }}
+        run: test "$RESULT" = success
+
+  fuzz:
+    name: Fuzz
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.14"
+      - run: pip install --require-hashes -r requirements-fuzz.txt
+      # A minute per push: enough to catch a pattern edit that breaks the
+      # contract, without making every PR wait on a long campaign.
+      - name: Fuzz the REST client injection guards
+        run: python fuzz/fuzz_api.py -max_total_time=60

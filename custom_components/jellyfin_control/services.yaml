@@ -1,0 +1,244 @@
+play_media_shuffle:
+  target:
+    entity:
+      integration: jellyfin_control
+      domain: media_player
+  fields:
+    media:
+      required: true
+      selector:
+        media:
+      example: '{"media_content_id": "a656b907eb3a73532e40e44b968d0225"}'
+
+play_items:
+  target:
+    entity:
+      integration: jellyfin_control
+      domain: media_player
+  fields:
+    item_ids:
+      required: true
+      example: "a656b907eb3a73532e40e44b968d0225"
+      selector:
+        text:
+          multiple: true
+    enqueue:
+      default: play
+      selector:
+        select:
+          translation_key: enqueue
+          options:
+            - play
+            - next
+            - add
+            - replace
+    shuffle:
+      default: false
+      selector:
+        boolean:
+    start_index:
+      selector:
+        number:
+          min: 0
+          max: 199
+          mode: box
+    start_position:
+      selector:
+        number:
+          min: 0
+          max: 86400
+          unit_of_measurement: s
+          mode: box
+
+play_instant_mix:
+  target:
+    entity:
+      integration: jellyfin_control
+      domain: media_player
+  fields:
+    item_id:
+      required: true
+      example: "a656b907eb3a73532e40e44b968d0225"
+      selector:
+        text:
+
+seek_relative:
+  target:
+    entity:
+      integration: jellyfin_control
+      domain: media_player
+  fields:
+    seconds:
+      required: true
+      example: 30
+      selector:
+        number:
+          min: -86400
+          max: 86400
+          unit_of_measurement: s
+          mode: box
+
+send_message:
+  target:
+    entity:
+      integration: jellyfin_control
+      domain: media_player
+  fields:
+    message:
+      required: true
+      example: "Dinner is ready"
+      selector:
+        text:
+          multiline: true
+    title:
+      example: "Home Assistant"
+      selector:
+        text:
+    timeout:
+      default: 5
+      selector:
+        number:
+          min: 1
+          max: 3600
+          unit_of_measurement: s
+          mode: box
+
+send_text:
+  target:
+    entity:
+      integration: jellyfin_control
+      domain: media_player
+  fields:
+    text:
+      required: true
+      example: "Star Wars"
+      selector:
+        text:
+
+send_command:
+  target:
+    entity:
+      integration: jellyfin_control
+      domain: media_player
+  fields:
+    command:
+      required: true
+      example: "ToggleOsdMenu"
+      selector:
+        text:
+    arguments:
+      example: '{"Volume": 30}'
+      selector:
+        object:
+
+display_content:
+  target:
+    entity:
+      integration: jellyfin_control
+      domain: media_player
+  fields:
+    item_id:
+      required: true
+      example: "a656b907eb3a73532e40e44b968d0225"
+      selector:
+        text:
+
+set_audio_stream:
+  target:
+    entity:
+      integration: jellyfin_control
+      domain: media_player
+  fields:
+    index:
+      required: true
+      example: 1
+      selector:
+        number:
+          min: 0
+          max: 999
+          mode: box
+
+set_subtitle_stream:
+  target:
+    entity:
+      integration: jellyfin_control
+      domain: media_player
+  fields:
+    index:
+      required: true
+      example: 2
+      selector:
+        number:
+          min: -1
+          max: 999
+          mode: box
+
+set_user_data:
+  target:
+    entity:
+      integration: jellyfin_control
+      domain: media_player
+  fields:
+    item_id:
+      required: true
+      example: "a656b907eb3a73532e40e44b968d0225"
+      selector:
+        text:
+    played:
+      selector:
+        boolean:
+    favorite:
+      selector:
+        boolean:
+
+get_queue:
+  target:
+    entity:
+      integration: jellyfin_control
+      domain: media_player
+
+browse_library:
+  target:
+    entity:
+      integration: jellyfin_control
+      domain: media_player
+  fields:
+    parent_id:
+      example: "special:resume"
+      selector:
+        text:
+
+search_library:
+  target:
+    entity:
+      integration: jellyfin_control
+      domain: media_player
+  fields:
+    query:
+      required: true
+      example: "Matrix"
+      selector:
+        text:
+    media_types:
+      example: "movie"
+      selector:
+        select:
+          multiple: true
+          translation_key: media_types
+          options:
+            - movie
+            - series
+            - episode
+            - music_album
+            - music_artist
+            - audio
+            - playlist
+            - box_set
+            - tv_channel
+    limit:
+      default: 50
+      selector:
+        number:
+          min: 1
+          max: 500
+          mode: box

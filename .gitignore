@@ -1,0 +1,19 @@
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+htmlcov/
+dist/
+build/
+*.egg-info/
+.DS_Store
+component-requirements.txt
+site/
+
+
+# graft's local graph cache — regenerable, not committed (run `graft build`).
+/graft/

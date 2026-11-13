@@ -1,0 +1,357 @@
+{
+  "config": {
+    "abort": {
+      "already_configured": "Ce serveur Jellyfin est déjà configuré.",
+      "reauth_successful": "La réauthentification a réussi.",
+      "reconfigure_successful": "La reconfiguration a réussi.",
+      "unique_id_mismatch": "Cette adresse désigne un autre serveur Jellyfin.",
+      "cannot_connect": "Impossible de joindre le serveur Jellyfin.",
+      "quick_connect_disabled": "Quick Connect est désactivé sur ce serveur. Activez-le dans le tableau de bord Jellyfin ou connectez-vous avec un mot de passe."
+    },
+    "error": {
+      "cannot_connect": "Connexion impossible. Vérifiez l'adresse et que le serveur fonctionne.",
+      "invalid_auth": "Nom d'utilisateur ou mot de passe invalide.",
+      "unknown": "Erreur inattendue.",
+      "quick_connect_pending": "Le code n'a pas encore été approuvé. Approuvez-le dans une application Jellyfin connectée, puis validez à nouveau.",
+      "quick_connect_expired": "Le code a expiré ; un nouveau code est affiché ci-dessous."
+    },
+    "step": {
+      "user": {
+        "title": "Serveur Jellyfin",
+        "description": "Saisissez l'adresse de votre serveur Jellyfin.",
+        "data": {
+          "url": "URL",
+          "verify_ssl": "Vérifier le certificat SSL"
+        },
+        "data_description": {
+          "url": "Par exemple http://192.168.1.10:8096. Un chemin de base /jellyfin derrière un proxy inverse est détecté automatiquement.",
+          "verify_ssl": "À désactiver uniquement pour un serveur utilisant un certificat auto-signé."
+        }
+      },
+      "auth": {
+        "title": "Connexion à {server}",
+        "description": "Choisissez comment Home Assistant se connecte. Seul un jeton d'accès est conservé ; le mot de passe n'est jamais stocké.",
+        "menu_options": {
+          "password": "Nom d'utilisateur et mot de passe",
+          "quick_connect": "Code Quick Connect"
+        }
+      },
+      "password": {
+        "title": "Connexion à {server}",
+        "data": {
+          "username": "Nom d'utilisateur",
+          "password": "Mot de passe"
+        },
+        "data_description": {
+          "username": "Utilisez un administrateur pour contrôler tous les clients et analyser les médiathèques.",
+          "password": "Échangé une fois contre un jeton d'accès, puis oublié."
+        }
+      },
+      "quick_connect": {
+        "title": "Quick Connect",
+        "description": "Dans une application Jellyfin déjà connectée à {server}, ouvrez Paramètres > Quick Connect et saisissez le code **{code}**. Validez ensuite ce formulaire."
+      },
+      "reconfigure": {
+        "title": "Modifier l'adresse du serveur",
+        "data": {
+          "url": "URL",
+          "verify_ssl": "Vérifier le certificat SSL"
+        },
+        "data_description": {
+          "url": "Nouvelle adresse du même serveur Jellyfin.",
+          "verify_ssl": "À désactiver uniquement pour un serveur utilisant un certificat auto-signé."
+        }
+      }
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "data": {
+          "scan_interval": "Intervalle d'interrogation",
+          "audio_codec": "Codec audio de diffusion"
+        },
+        "data_description": {
+          "scan_interval": "Fréquence de lecture des sessions sur le serveur.",
+          "audio_codec": "Codec utilisé quand la musique de la médiathèque est diffusée vers un autre lecteur Home Assistant."
+        }
+      }
+    }
+  },
+  "selector": {
+    "audio_codec": {
+      "options": {
+        "aac": "AAC",
+        "mp3": "MP3",
+        "opus": "Opus",
+        "flac": "FLAC"
+      }
+    },
+    "enqueue": {
+      "options": {
+        "play": "Lire maintenant",
+        "next": "Lire ensuite",
+        "add": "Ajouter à la file",
+        "replace": "Remplacer la file"
+      }
+    },
+    "media_types": {
+      "options": {
+        "movie": "Films",
+        "series": "Séries",
+        "episode": "Épisodes",
+        "music_album": "Albums",
+        "music_artist": "Artistes",
+        "audio": "Morceaux",
+        "playlist": "Listes de lecture",
+        "box_set": "Collections",
+        "tv_channel": "Chaînes TV"
+      }
+    }
+  },
+  "entity": {
+    "button": {
+      "refresh_library": {
+        "name": "Analyser les médiathèques"
+      }
+    },
+    "remote": {
+      "remote": {
+        "name": "Télécommande"
+      }
+    },
+    "select": {
+      "audio_track": {
+        "name": "Piste audio"
+      },
+      "subtitle_track": {
+        "name": "Sous-titres",
+        "state": {
+          "off": "Désactivés"
+        }
+      }
+    },
+    "sensor": {
+      "watching": {
+        "name": "Clients en lecture",
+        "unit_of_measurement": "clients"
+      },
+      "sessions": {
+        "name": "Clients connectés",
+        "unit_of_measurement": "clients"
+      }
+    }
+  },
+  "exceptions": {
+    "cannot_connect": {
+      "message": "Impossible de joindre le serveur Jellyfin : {error}"
+    },
+    "invalid_auth": {
+      "message": "Le jeton d'accès Jellyfin a été refusé. Reconnectez-vous."
+    },
+    "forbidden": {
+      "message": "Cet utilisateur Jellyfin n'y est pas autorisé (droits administrateur requis)."
+    },
+    "not_found": {
+      "message": "L'élément Jellyfin est introuvable."
+    },
+    "session_unavailable": {
+      "message": "Le client Jellyfin n'est pas connecté."
+    },
+    "command_unsupported": {
+      "message": "Le client Jellyfin ne prend pas en charge la commande {command}."
+    },
+    "nothing_to_play": {
+      "message": "Aucun élément lisible n'a été trouvé."
+    },
+    "unsupported_media_source": {
+      "message": "Les clients Jellyfin ne lisent que les éléments de leur médiathèque, pas {media_id}."
+    },
+    "invalid_option": {
+      "message": "Piste inconnue : {option}."
+    },
+    "no_server": {
+      "message": "Aucun serveur Jellyfin n'est chargé."
+    }
+  },
+  "services": {
+    "play_media_shuffle": {
+      "name": "Lire en aléatoire",
+      "description": "Lit un élément ou un dossier en aléatoire, en remplaçant la file.",
+      "fields": {
+        "media": {
+          "name": "Média",
+          "description": "Le média à lire."
+        }
+      }
+    },
+    "play_items": {
+      "name": "Lire des éléments",
+      "description": "Lit ou met en file des éléments ; dossiers, séries, albums et listes de lecture sont développés.",
+      "fields": {
+        "item_ids": {
+          "name": "Identifiants d'éléments",
+          "description": "Identifiants Jellyfin, lus dans cet ordre."
+        },
+        "enqueue": {
+          "name": "Mise en file",
+          "description": "Lire maintenant ou ajouter à la file."
+        },
+        "shuffle": {
+          "name": "Aléatoire",
+          "description": "Mélanger les éléments avant l'envoi."
+        },
+        "start_index": {
+          "name": "Index de départ",
+          "description": "Position de départ dans la liste."
+        },
+        "start_position": {
+          "name": "Position de départ",
+          "description": "Point de départ dans le premier élément."
+        }
+      }
+    },
+    "play_instant_mix": {
+      "name": "Lire un mix instantané",
+      "description": "Lit un mix construit par le serveur à partir d'un morceau, album, artiste ou genre.",
+      "fields": {
+        "item_id": {
+          "name": "Identifiant d'élément",
+          "description": "Morceau, album, artiste ou genre de départ."
+        }
+      }
+    },
+    "seek_relative": {
+      "name": "Avance ou recul relatif",
+      "description": "Avance ou recule depuis la position courante.",
+      "fields": {
+        "seconds": {
+          "name": "Secondes",
+          "description": "Positif pour avancer, négatif pour reculer."
+        }
+      }
+    },
+    "send_message": {
+      "name": "Envoyer un message",
+      "description": "Affiche un message sur l'écran du client.",
+      "fields": {
+        "message": {
+          "name": "Message",
+          "description": "Texte à afficher."
+        },
+        "title": {
+          "name": "Titre",
+          "description": "En-tête du message."
+        },
+        "timeout": {
+          "name": "Durée",
+          "description": "Durée d'affichage du message."
+        }
+      }
+    },
+    "send_text": {
+      "name": "Envoyer du texte",
+      "description": "Saisit du texte dans le champ actif du client (recherche).",
+      "fields": {
+        "text": {
+          "name": "Texte",
+          "description": "Texte à saisir."
+        }
+      }
+    },
+    "send_command": {
+      "name": "Envoyer une commande",
+      "description": "Envoie n'importe quelle commande générale Jellyfin avec arguments.",
+      "fields": {
+        "command": {
+          "name": "Commande",
+          "description": "Nom de la commande générale, par exemple ToggleOsdMenu ou SetVolume."
+        },
+        "arguments": {
+          "name": "Arguments",
+          "description": "Arguments de la commande."
+        }
+      }
+    },
+    "display_content": {
+      "name": "Afficher un contenu",
+      "description": "Ouvre la page d'un élément sur le client.",
+      "fields": {
+        "item_id": {
+          "name": "Identifiant d'élément",
+          "description": "Élément à afficher."
+        }
+      }
+    },
+    "set_audio_stream": {
+      "name": "Choisir la piste audio",
+      "description": "Change la piste audio de l'élément en cours.",
+      "fields": {
+        "index": {
+          "name": "Index du flux",
+          "description": "Index Jellyfin du flux audio."
+        }
+      }
+    },
+    "set_subtitle_stream": {
+      "name": "Choisir les sous-titres",
+      "description": "Change les sous-titres de l'élément en cours.",
+      "fields": {
+        "index": {
+          "name": "Index du flux",
+          "description": "Index Jellyfin du flux de sous-titres, -1 pour les désactiver."
+        }
+      }
+    },
+    "set_user_data": {
+      "name": "Marquer vu ou favori",
+      "description": "Marque un élément vu ou non vu, favori ou non.",
+      "fields": {
+        "item_id": {
+          "name": "Identifiant d'élément",
+          "description": "Élément à modifier."
+        },
+        "played": {
+          "name": "Vu",
+          "description": "Marquer vu (activé) ou non vu (désactivé)."
+        },
+        "favorite": {
+          "name": "Favori",
+          "description": "Ajouter aux favoris (activé) ou retirer (désactivé)."
+        }
+      }
+    },
+    "get_queue": {
+      "name": "Obtenir la file",
+      "description": "Renvoie la file de lecture du client."
+    },
+    "browse_library": {
+      "name": "Parcourir la médiathèque",
+      "description": "Renvoie le contenu d'un dossier de la médiathèque.",
+      "fields": {
+        "parent_id": {
+          "name": "Identifiant parent",
+          "description": "Dossier, série, album ou special:resume, special:next_up, special:latest, special:favorites. Vide pour la racine."
+        }
+      }
+    },
+    "search_library": {
+      "name": "Rechercher dans la médiathèque",
+      "description": "Recherche dans la médiathèque et renvoie les éléments trouvés.",
+      "fields": {
+        "query": {
+          "name": "Recherche",
+          "description": "Texte recherché."
+        },
+        "media_types": {
+          "name": "Types de médias",
+          "description": "Limiter à ces types."
+        },
+        "limit": {
+          "name": "Limite",
+          "description": "Nombre maximal de résultats."
+        }
+      }
+    }
+  }
+}

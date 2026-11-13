@@ -1,0 +1,74 @@
+site_name: Jellyfin Control
+site_description: Home Assistant integration that browses a Jellyfin library and fully controls its clients
+site_url: https://fiveelements.github.io/ha-jellyfin/
+repo_url: https://github.com/FiveElements/ha-jellyfin
+repo_name: FiveElements/ha-jellyfin
+edit_uri: edit/main/docs/
+
+theme:
+  name: material
+  language: en
+  palette:
+    - media: "(prefers-color-scheme)"
+      toggle:
+        icon: material/brightness-auto
+        name: Switch to light mode
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to system preference
+  features:
+    - navigation.instant
+    - navigation.tracking
+    - navigation.tabs
+    - navigation.sections
+    - navigation.top
+    - search.suggest
+    - search.highlight
+    - content.action.edit
+    - content.code.copy
+    - toc.follow
+
+plugins:
+  - search
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.details
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.tabbed:
+      alternate_style: true
+
+nav:
+  - Home: index.md
+  - Install: install.md
+  - Configuration: configuration.md
+  - Entities: entities.md
+  - Actions: actions.md
+  - Library browsing: library.md
+  - Examples: examples.md
+  - Troubleshooting: troubleshooting.md
+  - Comparison: comparison.md
+  - Architecture: architecture.md
+  - Development: development.md

@@ -1,0 +1,8 @@
+{
+  "name": "Jellyfin Control",
+  "content_in_root": false,
+  "render_readme": true,
+  "homeassistant": "2026.11.0",
+  "zip_release": true,
+  "filename": "jellyfin_control.zip"
+}

@@ -1,0 +1,52 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    name: Build and publish
+    runs-on: ubuntu-latest
+    permissions:
+      # Creating the release and attaching the zip.
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # The tag is the only place a version is written. The repository keeps
+      # 0.0.0 in manifest.json and pyproject.toml, so two files can no longer
+      # disagree with each other or with the tag.
+      - name: Stamp the tag's version into the manifest
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          if ! [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::Tag $GITHUB_REF_NAME is not vX.Y.Z"
+            exit 1
+          fi
+          python - "$version" <<'PY'
+          import json, sys
+          from pathlib import Path
+
+          path = Path("custom_components/jellyfin_control/manifest.json")
+          manifest = json.loads(path.read_text())
+          manifest["version"] = sys.argv[1]
+          path.write_text(json.dumps(manifest, indent=2) + "\n")
+          PY
+          grep '"version"' custom_components/jellyfin_control/manifest.json
+
+      # HACS installs this zip (zip_release in hacs.json), so its manifest is
+      # the version users see.
+      - name: Build the HACS zip
+        run: |
+          cd custom_components/jellyfin_control
+          zip -r ../../jellyfin_control.zip . -x '*__pycache__*'
+
+      - name: Publish the release
+        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
+        with:
+          files: jellyfin_control.zip
+          generate_release_notes: true

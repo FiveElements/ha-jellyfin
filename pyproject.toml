@@ -1,0 +1,47 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ha-jellyfin"
+# The release tag is the version: the release workflow stamps it into the
+# manifest it ships. Nothing reads this one, so it is never bumped.
+version = "0.0.0"
+description = "Home Assistant integration that browses a Jellyfin library and fully controls its clients"
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.14.2"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+# Home Assistant aliases httpx to httpx2 on import and refuses once httpx is
+# loaded; respx's pytest plugin loaded first and stopped the whole session.
+addopts = "-p no:respx"
+testpaths = ["tests"]
+norecursedirs = [".git", ".venv"]
+
+[tool.ruff]
+target-version = "py314"
+line-length = 88
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "N", "UP", "B", "SIM", "D", "RUF"]
+ignore = ["D203", "D213"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["D100", "D103", "D104"]
+
+[tool.ruff.lint.isort]
+force-sort-within-sections = true
+known-first-party = ["homeassistant"]
+combine-as-imports = true
+
+[tool.ruff.lint.pydocstyle]
+convention = "pep257"
+
+[tool.mypy]
+python_version = "3.14"
+strict = true
+packages = ["custom_components.jellyfin_control"]
+show_error_codes = true
+warn_unused_ignores = true

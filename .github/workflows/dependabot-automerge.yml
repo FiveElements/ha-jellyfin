@@ -1,0 +1,62 @@
+name: Dependabot auto-merge
+
+# Runs after each PR workflow finishes rather than relying on GitHub's native
+# auto-merge: that waits only for the checks branch protection lists, and a job
+# added since (a new matrix row, a new workflow) would not hold the merge.
+on:
+  workflow_run:
+    workflows: [CI, Validate, CodeQL, Docs]
+    types: [completed]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dependabot-automerge-${{ github.event.workflow_run.head_sha }}
+
+jobs:
+  merge:
+    name: Merge when every check is green
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      checks: read
+    # The actor, not the PR author: a human pushing onto a Dependabot branch
+    # makes the next run theirs, and that change deserves a review.
+    if: >-
+      github.event.workflow_run.event == 'pull_request' &&
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.actor.login == 'dependabot[bot]'
+    steps:
+      - name: Merge if no check is pending or failing
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.event.workflow_run.head_sha }}
+          BRANCH: ${{ github.event.workflow_run.head_branch }}
+        run: |
+          # One workflow succeeding says nothing about the others; the last one
+          # to finish is the run that merges.
+          pending=$(gh api --paginate "repos/$REPO/commits/$SHA/check-runs" \
+            --jq '.check_runs[] | select(.status != "completed") | .name')
+          if [ -n "$pending" ]; then
+            echo "Still running:"; echo "$pending"; exit 0
+          fi
+          failed=$(gh api --paginate "repos/$REPO/commits/$SHA/check-runs" \
+            --jq '.check_runs[]
+                  | select(.conclusion | IN("success", "skipped", "neutral") | not)
+                  | "\(.name): \(.conclusion)"')
+          if [ -n "$failed" ]; then
+            echo "Not merging:"; echo "$failed"; exit 0
+          fi
+          pr=$(gh pr list --repo "$REPO" --head "$BRANCH" --state open \
+            --json number,author \
+            --jq '.[] | select(.author.login == "app/dependabot") | .number')
+          if [ -z "$pr" ]; then
+            echo "No open Dependabot PR for $BRANCH"; exit 0
+          fi
+          # --match-head-commit refuses if Dependabot rebased after these checks
+          # ran; the new commit gets its own runs and its own merge attempt.
+          gh pr merge "$pr" --repo "$REPO" --squash --delete-branch \
+            --match-head-commit "$SHA"

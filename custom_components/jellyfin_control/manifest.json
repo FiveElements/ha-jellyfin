@@ -1,0 +1,15 @@
+{
+  "domain": "jellyfin_control",
+  "name": "Jellyfin Control",
+  "after_dependencies": ["media_source"],
+  "codeowners": ["@jmorille"],
+  "config_flow": true,
+  "dependencies": ["http"],
+  "documentation": "https://fiveelements.github.io/ha-jellyfin/",
+  "integration_type": "hub",
+  "iot_class": "local_polling",
+  "issue_tracker": "https://github.com/FiveElements/ha-jellyfin/issues",
+  "quality_scale": "platinum",
+  "requirements": [],
+  "version": "0.0.0"
+}

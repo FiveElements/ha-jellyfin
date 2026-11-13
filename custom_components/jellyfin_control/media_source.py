@@ -1,0 +1,184 @@
+"""Media source: stream the Jellyfin library to any Home Assistant player."""
+
+from __future__ import annotations
+
+import mimetypes
+from typing import override
+
+from homeassistant.components.media_player import MediaClass, MediaType
+from homeassistant.components.media_source import (
+    BrowseMediaSource,
+    MediaSource,
+    MediaSourceItem,
+    PlayMedia,
+    Unresolvable,
+)
+from homeassistant.config_entries import ConfigEntryState
+from homeassistant.core import HomeAssistant
+
+from .api import JellyfinError, JsonObject
+from .const import CONF_AUDIO_CODEC, DEFAULT_AUDIO_CODEC, DOMAIN, MAX_IMAGE_WIDTH
+from .coordinator import JellyfinConfigEntry
+from .library import Library, LibraryNode
+
+
+async def async_get_media_source(hass: HomeAssistant) -> MediaSource:
+    """Set up the Jellyfin media source."""
+    return JellyfinMediaSource(hass)
+
+
+def mime_type(item: JsonObject) -> str | None:
+    """Guess the MIME type from the first media source's path or container."""
+    sources = item.get("MediaSources") or []
+    for source in sources:
+        if path := source.get("Path"):
+            guessed, _ = mimetypes.guess_type(str(path))
+            if guessed:
+                return guessed
+        if container := source.get("Container"):
+            guessed, _ = mimetypes.guess_type(f"file.{str(container).split(',')[0]}")
+            if guessed:
+                return guessed
+    media_type = item.get("MediaType")
+    if media_type == "Audio":
+        return "audio/mpeg"
+    if media_type == "Video":
+        return "video/mp4"
+    return None
+
+
+class JellyfinMediaSource(MediaSource):
+    """Browse and resolve Jellyfin items for other players."""
+
+    name = "Jellyfin Control"
+
+    def __init__(self, hass: HomeAssistant) -> None:
+        """Initialize the media source."""
+        super().__init__(DOMAIN)
+        self.hass = hass
+
+    def _entries(self) -> list[JellyfinConfigEntry]:
+        return [
+            e
+            for e in self.hass.config_entries.async_entries(DOMAIN)
+            if e.state is ConfigEntryState.LOADED
+        ]
+
+    def _split(self, identifier: str) -> tuple[JellyfinConfigEntry, str]:
+        """Return the entry and node id of an `<entry_id>/<node_id>` identifier."""
+        entries = self._entries()
+        if not entries:
+            raise Unresolvable(translation_domain=DOMAIN, translation_key="no_server")
+        entry_id, _, node_id = identifier.partition("/")
+        for entry in entries:
+            if entry.entry_id == entry_id:
+                return entry, node_id
+        if len(entries) == 1 and "/" not in identifier:
+            return entries[0], identifier
+        raise Unresolvable(translation_domain=DOMAIN, translation_key="no_server")
+
+    @override
+    async def async_resolve_media(self, item: MediaSourceItem) -> PlayMedia:
+        """Return a stream URL for an item."""
+        entry, item_id = self._split(item.identifier)
+        client = entry.runtime_data.client
+        try:
+            media = await client.item(item_id)
+        except JellyfinError as err:
+            raise Unresolvable(
+                translation_domain=DOMAIN, translation_key="not_found"
+            ) from err
+        mime = mime_type(media)
+        if mime is None:
+            raise Unresolvable(
+                translation_domain=DOMAIN, translation_key="nothing_to_play"
+            )
+        if media.get("MediaType") == "Audio":
+            codec = entry.options.get(CONF_AUDIO_CODEC, DEFAULT_AUDIO_CODEC)
+            return PlayMedia(client.audio_stream_url(item_id, codec), mime)
+        sources = media.get("MediaSources") or [{}]
+        return PlayMedia(client.video_stream_url(item_id, sources[0].get("Id")), mime)
+
+    @override
+    async def async_browse_media(self, item: MediaSourceItem) -> BrowseMediaSource:
+        """Browse servers, then their libraries."""
+        entries = self._entries()
+        if not item.identifier:
+            if len(entries) == 1:
+                return await self._browse(entries[0], "")
+            return BrowseMediaSource(
+                domain=DOMAIN,
+                identifier=None,
+                media_class=MediaClass.DIRECTORY,
+                media_content_type=MediaType.CHANNELS,
+                title=self.name,
+                can_play=False,
+                can_expand=True,
+                children_media_class=MediaClass.DIRECTORY,
+                children=[
+                    BrowseMediaSource(
+                        domain=DOMAIN,
+                        identifier=f"{e.entry_id}/",
+                        media_class=MediaClass.DIRECTORY,
+                        media_content_type=MediaType.CHANNELS,
+                        title=e.title,
+                        can_play=False,
+                        can_expand=True,
+                    )
+                    for e in entries
+                ],
+            )
+        entry, node_id = self._split(item.identifier)
+        return await self._browse(entry, node_id)
+
+    async def _browse(
+        self, entry: JellyfinConfigEntry, node_id: str
+    ) -> BrowseMediaSource:
+        library = Library(entry.runtime_data.client)
+        try:
+            node = (
+                await library.browse(node_id)
+                if node_id
+                else await library.root(entry.title)
+            )
+        except JellyfinError as err:
+            raise Unresolvable(
+                translation_domain=DOMAIN, translation_key="not_found"
+            ) from err
+        return self._to_source(entry, node, with_children=True)
+
+    def _to_source(
+        self, entry: JellyfinConfigEntry, node: LibraryNode, *, with_children: bool
+    ) -> BrowseMediaSource:
+        client = entry.runtime_data.client
+        thumbnail = None
+        if node.image is not None:
+            thumbnail = client.image_url(
+                node.image.item_id,
+                node.image.image_type,
+                node.image.tag,
+                MAX_IMAGE_WIDTH,
+            )
+        # Only single items stream; folders are expanded by the browser.
+        playable = node.can_play and node.item is not None and not node.can_expand
+        return BrowseMediaSource(
+            domain=DOMAIN,
+            identifier=f"{entry.entry_id}/{node.node_id}",
+            media_class=node.media_class,
+            media_content_type=(
+                (mime_type(node.item) or node.content_type)
+                if playable and node.item is not None
+                else node.content_type
+            ),
+            title=node.title,
+            can_play=playable,
+            can_expand=node.can_expand,
+            thumbnail=thumbnail,
+            not_shown=node.not_shown,
+            children_media_class=node.children_media_class,
+            children=(
+                [self._to_source(entry, c, with_children=False) for c in node.children]
+                if with_children
+                else None
+            ),
+        )

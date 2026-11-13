@@ -1,0 +1,34 @@
+{
+  "entity": {
+    "button": {
+      "refresh_library": { "default": "mdi:folder-refresh" }
+    },
+    "remote": {
+      "remote": { "default": "mdi:remote-tv" }
+    },
+    "select": {
+      "audio_track": { "default": "mdi:speaker-message" },
+      "subtitle_track": { "default": "mdi:subtitles" }
+    },
+    "sensor": {
+      "watching": { "default": "mdi:television-play" },
+      "sessions": { "default": "mdi:devices" }
+    }
+  },
+  "services": {
+    "play_media_shuffle": { "service": "mdi:shuffle-variant" },
+    "play_items": { "service": "mdi:playlist-play" },
+    "play_instant_mix": { "service": "mdi:music-box-multiple" },
+    "seek_relative": { "service": "mdi:fast-forward-10" },
+    "send_message": { "service": "mdi:message-text" },
+    "send_text": { "service": "mdi:keyboard" },
+    "send_command": { "service": "mdi:console" },
+    "display_content": { "service": "mdi:television-guide" },
+    "set_audio_stream": { "service": "mdi:speaker-message" },
+    "set_subtitle_stream": { "service": "mdi:subtitles" },
+    "set_user_data": { "service": "mdi:heart-check" },
+    "get_queue": { "service": "mdi:playlist-music" },
+    "browse_library": { "service": "mdi:folder-play" },
+    "search_library": { "service": "mdi:movie-search" }
+  }
+}
