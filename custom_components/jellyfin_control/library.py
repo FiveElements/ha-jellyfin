@@ -34,6 +34,9 @@ SPECIAL_FAVORITES = "special:favorites"
 PREFIX_ARTISTS = "artists:"
 PREFIX_ALBUMS = "albums:"
 PREFIX_SONGS = "songs:"
+# Recently added items of one library: "Recently added" mixes every library,
+# so a burst of photos hid the new films and manga.
+PREFIX_LATEST = "latest:"
 
 SPECIAL_TITLES: dict[str, str] = {
     SPECIAL_RESUME: "Continue watching",
@@ -212,6 +215,16 @@ class Library:
         for prefix in (PREFIX_ARTISTS, PREFIX_ALBUMS, PREFIX_SONGS):
             if node_id.startswith(prefix):
                 return await self._music(prefix, node_id[len(prefix) :], limit)
+        if node_id.startswith(PREFIX_LATEST):
+            library_id = node_id[len(PREFIX_LATEST) :]
+            node = folder_node(node_id, SPECIAL_TITLES[SPECIAL_LATEST])
+            latest: Params = {
+                "Limit": 100,
+                "Fields": ITEM_FIELDS,
+                "ParentId": library_id,
+            }
+            node.children = _nodes(await self.client.latest_items(latest))
+            return node
 
         item = await self.client.item(node_id)
         node = item_node(item)
@@ -270,7 +283,10 @@ class Library:
         node = folder_node(node_id, SPECIAL_TITLES[node_id])
         client = self.client
         if node_id == SPECIAL_RESUME:
-            return _with_children(node, await client.resume_items(limit))
+            # Without MediaTypes the server also listed series and seasons
+            # (387 entries, 270 of them folders, on a real library).
+            resume = {**limit, "MediaTypes": "Video"}
+            return _with_children(node, await client.resume_items(resume))
         if node_id == SPECIAL_NEXT_UP:
             return _with_children(node, await client.next_up(limit))
         if node_id == SPECIAL_LATEST:

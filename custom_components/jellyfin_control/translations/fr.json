@@ -341,7 +341,11 @@
       "fields": {
         "parent_id": {
           "name": "Identifiant parent",
-          "description": "Dossier, série, album ou special:resume, special:next_up, special:latest, special:favorites. Vide pour la racine."
+          "description": "Dossier, série, album, special:resume, special:next_up, special:latest, special:favorites, ou latest:ID_MEDIATHEQUE pour les nouveautés d'une seule médiathèque. Vide pour la racine."
+        },
+        "limit": {
+          "name": "Limite",
+          "description": "Nombre maximal d'éléments renvoyés ; le reste est compté dans not_shown."
         }
       }
     },

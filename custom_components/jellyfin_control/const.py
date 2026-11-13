@@ -46,6 +46,9 @@ MAX_QUEUE_ITEMS: Final = 200
 MAX_IMAGE_WIDTH: Final = 600
 MAX_IMAGE_BYTES: Final = 5 * 1024 * 1024
 MAX_SEARCH_RESULTS: Final = 50
+# browse_library answers go to scripts and AI agents: a resume list of 400
+# items with overviews was 220 kB. The media browser is not limited by this.
+MAX_BROWSE_RESULTS: Final = 100
 MAX_STREAMING_BITRATE: Final = "140000000"
 
 DEFAULT_MESSAGE_TIMEOUT: Final = 5

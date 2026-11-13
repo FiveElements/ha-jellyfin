@@ -575,6 +575,34 @@ async def test_browse_summaries(
     assert result["items"][0]["title"] == "1. Song"
 
 
+async def test_browse_library_limit(
+    hass: HomeAssistant, fake: FakeJellyfin, loaded: MockConfigEntry
+) -> None:
+    """Answers meant for agents stay small; what is cut is counted."""
+    result = await jf_response(hass, "browse_library", limit=2)
+    assert len(result["items"]) == 2
+    full = await jf_response(hass, "browse_library", limit=1000)
+    assert result["not_shown"] == len(full["items"]) - 2
+
+
+async def test_latest_of_one_library(
+    hass: HomeAssistant, fake: FakeJellyfin, loaded: MockConfigEntry
+) -> None:
+    """Recently added mixes every library; latest:<id> keeps to one."""
+    result = await jf_response(hass, "browse_library", parent_id="latest:lib_movies")
+    assert fake.last("GET", "/Items/Latest").params["ParentId"] == "lib_movies"
+    assert result["id"] == "latest:lib_movies"
+    assert [item["id"] for item in result["items"]] == ["mov1"]
+
+
+async def test_resume_lists_videos_only(
+    hass: HomeAssistant, fake: FakeJellyfin, loaded: MockConfigEntry
+) -> None:
+    """Without MediaTypes the server also listed series and seasons."""
+    await jf_response(hass, "browse_library", parent_id="special:resume")
+    assert fake.last("GET", "/UserItems/Resume").params["MediaTypes"] == "Video"
+
+
 async def test_search_library(
     hass: HomeAssistant, fake: FakeJellyfin, loaded: MockConfigEntry
 ) -> None:

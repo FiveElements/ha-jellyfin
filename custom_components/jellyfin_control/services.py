@@ -17,7 +17,13 @@ from homeassistant.components.media_player import (
 from homeassistant.core import HomeAssistant, SupportsResponse, callback
 from homeassistant.helpers import config_validation as cv, service
 
-from .const import DEFAULT_MESSAGE_TIMEOUT, DOMAIN, MAX_SEARCH_RESULTS
+from .const import (
+    DEFAULT_MESSAGE_TIMEOUT,
+    DOMAIN,
+    MAX_BROWSE_ITEMS,
+    MAX_BROWSE_RESULTS,
+    MAX_SEARCH_RESULTS,
+)
 
 PLAY = MediaPlayerEntityFeature.PLAY_MEDIA
 
@@ -172,7 +178,14 @@ SERVICES: tuple[tuple[str, str, Any, int | None, SupportsResponse], ...] = (
     (
         "browse_library",
         "async_browse_library",
-        _schema({probatio.Optional("parent_id"): cv.string}),
+        _schema(
+            {
+                probatio.Optional("parent_id"): cv.string,
+                probatio.Optional("limit", default=MAX_BROWSE_RESULTS): probatio.All(
+                    probatio.Coerce(int), probatio.Range(min=1, max=MAX_BROWSE_ITEMS)
+                ),
+            }
+        ),
         None,
         SupportsResponse.ONLY,
     ),
