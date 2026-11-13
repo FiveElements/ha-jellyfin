@@ -585,6 +585,16 @@ async def test_browse_library_limit(
     assert result["not_shown"] == len(full["items"]) - 2
 
 
+async def test_latest_of_one_library(
+    hass: HomeAssistant, fake: FakeJellyfin, loaded: MockConfigEntry
+) -> None:
+    """Recently added mixes every library; latest:<id> keeps to one."""
+    result = await jf_response(hass, "browse_library", parent_id="latest:lib_movies")
+    assert fake.last("GET", "/Items/Latest").params["ParentId"] == "lib_movies"
+    assert result["id"] == "latest:lib_movies"
+    assert [item["id"] for item in result["items"]] == ["mov1"]
+
+
 async def test_resume_lists_videos_only(
     hass: HomeAssistant, fake: FakeJellyfin, loaded: MockConfigEntry
 ) -> None:

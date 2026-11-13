@@ -341,7 +341,7 @@
       "fields": {
         "parent_id": {
           "name": "Parent ID",
-          "description": "Folder, series, album or special:resume, special:next_up, special:latest, special:favorites. Empty for the root."
+          "description": "Folder, series, album, special:resume, special:next_up, special:latest, special:favorites, or latest:<library id> for the newest items of one library. Empty for the root."
         },
         "limit": {
           "name": "Limit",

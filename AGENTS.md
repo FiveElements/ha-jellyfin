@@ -142,8 +142,8 @@ them.
 - **Folders are expanded into at most `MAX_QUEUE_ITEMS` (200) ids**: they travel
   in the query string of `POST /Sessions/{id}/Playing`.
 - **Virtual browse ids contain a colon** (`special:resume`, `artists:<lib>`,
-  `albums:<lib>`, `songs:<lib>`); Jellyfin ids are 32 hex digits and cannot
-  collide.
+  `albums:<lib>`, `songs:<lib>`, `latest:<lib>`); Jellyfin ids are 32 hex
+  digits and cannot collide.
 - **The server device is created in `async_setup_entry` before the platforms**:
   client devices link to it with `via_device_id` (`via_device` is deprecated).
 

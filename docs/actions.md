@@ -15,7 +15,7 @@ All take a `jellyfin_control` media player as target.
 | `jellyfin_control.set_audio_stream` / `set_subtitle_stream` | Switch tracks by index (`-1` turns subtitles off). |
 | `jellyfin_control.set_user_data` | Mark played / unplayed, favorite / not. |
 | `jellyfin_control.get_queue` | **Returns** the play queue. |
-| `jellyfin_control.browse_library` | **Returns** the children of a folder (root, `special:resume`, `special:next_up`, `special:latest`, `special:favorites`, any item id). |
+| `jellyfin_control.browse_library` | **Returns** the children of a folder (root, `special:resume`, `special:next_up`, `special:latest`, `special:favorites`, `latest:<library id>` for the newest items of one library, any item id). |
 | `jellyfin_control.search_library` | **Returns** matching items. |
 
 Remote commands accept these aliases: `up`, `down`, `left`, `right`, `select`
