@@ -23,6 +23,7 @@ REQUEST_TIMEOUT = aiohttp.ClientTimeout(total=15)
 STREAM_TIMEOUT = aiohttp.ClientTimeout(total=None, sock_connect=15)
 # A browse page of 1000 items is a few MB; anything far larger is not an answer.
 MAX_RESPONSE_BYTES = 32 * 1024 * 1024
+READ_CHUNK_SIZE = 64 * 1024
 
 # Audio codec offered to other players -> (container, MIME type). The server
 # either serves the file as is when it already matches, or transcodes to it,
@@ -116,6 +117,23 @@ def _header_param(value: str) -> str:
     `%41` in a location name still arrives unchanged.
     """
     return quote(value, safe=" ")
+
+
+async def _read_body(response: aiohttp.ClientResponse, limit: int) -> bytes | None:
+    """Read the whole body; None as soon as it is known to exceed `limit`.
+
+    `StreamReader.read(n)` returns what is buffered, not n bytes: a body
+    spread over several TCP segments came back truncated and failed as
+    "Response is not JSON" as soon as a client started playing.
+    """
+    if (response.content_length or 0) > limit:
+        return None
+    body = bytearray()
+    async for chunk in response.content.iter_chunked(READ_CHUNK_SIZE):
+        body += chunk
+        if len(body) > limit:
+            return None
+    return bytes(body)
 
 
 def _segment(value: str) -> str:
@@ -212,10 +230,10 @@ class JellyfinClient:
                 allow_redirects=False,
             ) as response:
                 _raise_for_status(response.status)
-                raw = await response.content.read(MAX_RESPONSE_BYTES + 1)
+                raw = await _read_body(response, MAX_RESPONSE_BYTES)
         except (aiohttp.ClientError, TimeoutError) as err:
             raise JellyfinConnectionError(str(err) or type(err).__name__) from err
-        if len(raw) > MAX_RESPONSE_BYTES:
+        if raw is None:
             raise JellyfinConnectionError("Response too large")
         text = raw.decode("utf-8", errors="replace")
         if not text:
@@ -567,10 +585,8 @@ class JellyfinClient:
                 if response.status == 404:
                     return None
                 _raise_for_status(response.status)
-                if (response.content_length or 0) > max_bytes:
-                    return None
-                content = await response.content.read(max_bytes + 1)
-                if len(content) > max_bytes:
+                content = await _read_body(response, max_bytes)
+                if content is None:
                     return None
                 return content, response.content_type or "image/jpeg"
         except (aiohttp.ClientError, TimeoutError) as err:

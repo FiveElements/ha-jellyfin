@@ -20,7 +20,12 @@ from homeassistant.components.http.auth import async_sign_path
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.core import HomeAssistant, callback
 
-from .api import AUDIO_FORMATS, JellyfinError, JellyfinNotFoundError
+from .api import (
+    AUDIO_FORMATS,
+    READ_CHUNK_SIZE,
+    JellyfinError,
+    JellyfinNotFoundError,
+)
 from .const import (
     CONF_AUDIO_CODEC,
     DEFAULT_AUDIO_CODEC,
@@ -36,7 +41,6 @@ IMAGE_URL = "/api/jellyfin_control/{entry_id}/image/{item_id}/{image_type}/{tag}
 STREAM_URL = "/api/jellyfin_control/{entry_id}/stream/{item_id}"
 # Long enough to browse a library, short enough that a leaked link expires.
 THUMBNAIL_SIGNATURE_TTL = timedelta(hours=24)
-CHUNK_SIZE = 64 * 1024
 FORWARDED_HEADERS = (
     hdrs.CONTENT_TYPE,
     hdrs.CONTENT_LENGTH,
@@ -175,7 +179,7 @@ class JellyfinStreamView(HomeAssistantView):
                 if fallback_type and hdrs.CONTENT_TYPE not in response.headers:
                     response.headers[hdrs.CONTENT_TYPE] = fallback_type
                 await response.prepare(request)
-                async for chunk in upstream.content.iter_chunked(CHUNK_SIZE):
+                async for chunk in upstream.content.iter_chunked(READ_CHUNK_SIZE):
                     await response.write(chunk)
                 await response.write_eof()
                 return response

@@ -30,15 +30,16 @@
         }
       },
       "auth": {
-        "title": "Connexion à {server}",
-        "description": "Choisissez comment Home Assistant se connecte. Seul un jeton d'accès est conservé ; le mot de passe n'est jamais stocké.",
+        "title": "Connexion",
+        "description": "Choisissez comment Home Assistant se connecte à {server}. Seul un jeton d'accès est conservé ; le mot de passe n'est jamais stocké.",
         "menu_options": {
           "password": "Nom d'utilisateur et mot de passe",
           "quick_connect": "Code Quick Connect"
         }
       },
       "password": {
-        "title": "Connexion à {server}",
+        "title": "Connexion",
+        "description": "Connectez-vous à {server} avec un compte Jellyfin.",
         "data": {
           "username": "Nom d'utilisateur",
           "password": "Mot de passe"
