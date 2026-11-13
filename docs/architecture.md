@@ -8,7 +8,8 @@
 | `entity.py` | Base entities, device info, `call_api()` that turns client errors into translated Home Assistant errors. |
 | `media_player.py` | One player per device: state, controls, play media, browse and search, artwork proxy, action handlers. |
 | `remote.py`, `select.py`, `sensor.py`, `button.py` | The other platforms. |
-| `media_source.py` | The library as a media source with stream URLs. |
+| `media_source.py` | The library as a media source; resolves to relayed stream paths. |
+| `views.py` | Home Assistant views relaying artwork and streams with the token in a header (signed paths, Range pass-through). |
 | `services.py` | Registration and schemas of the entity actions. |
 | `config_flow.py` | Server, password or Quick Connect, reauth, reconfigure, options. |
 | `diagnostics.py` | Entry dump without token, user id or client addresses. |

@@ -19,4 +19,6 @@ artists.
 The same tree is offered as a **media source** (*Media > Jellyfin Control*),
 so library items can be streamed to any Home Assistant player (Cast, Sonos,
 browser). Videos are streamed as they are stored; music is offered in the
-codec chosen in the options.
+codec chosen in the options (MP3 by default). Streams and thumbnails are
+relayed by Home Assistant through short-lived signed paths: the player never
+receives the Jellyfin token and only needs to reach Home Assistant.

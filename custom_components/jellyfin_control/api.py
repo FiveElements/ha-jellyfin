@@ -7,6 +7,7 @@ and raises its own exceptions, which the integration translates.
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
+from contextlib import AbstractAsyncContextManager
 from dataclasses import dataclass
 import json
 from typing import Any
@@ -18,6 +19,20 @@ from yarl import URL
 type JsonObject = dict[str, Any]
 
 REQUEST_TIMEOUT = aiohttp.ClientTimeout(total=15)
+# Streams last as long as the media; only connecting is bounded.
+STREAM_TIMEOUT = aiohttp.ClientTimeout(total=None, sock_connect=15)
+# A browse page of 1000 items is a few MB; anything far larger is not an answer.
+MAX_RESPONSE_BYTES = 32 * 1024 * 1024
+
+# Audio codec offered to other players -> (container, MIME type). The server
+# either serves the file as is when it already matches, or transcodes to it,
+# so the MIME type always describes what is sent.
+AUDIO_FORMATS: dict[str, tuple[str, str]] = {
+    "mp3": ("mp3", "audio/mpeg"),
+    "aac": ("aac", "audio/aac"),
+    "opus": ("ogg", "audio/ogg"),
+    "flac": ("flac", "audio/flac"),
+}
 BASE_PATH_CANDIDATES = ("/jellyfin",)
 
 
@@ -94,8 +109,13 @@ def normalize_url(url: str) -> str:
 
 
 def _header_param(value: str) -> str:
-    """Drop what would break the `Key="value"` syntax of the auth header."""
-    return "".join(c for c in value if c not in '",' and c.isprintable())
+    """Percent-encode a value of the auth header.
+
+    Jellyfin URL-decodes each value, so encoding keeps quotes, commas and
+    control characters from breaking the `Key="value"` syntax while a `+` or
+    `%41` in a location name still arrives unchanged.
+    """
+    return quote(value, safe=" ")
 
 
 def _segment(value: str) -> str:
@@ -192,9 +212,12 @@ class JellyfinClient:
                 allow_redirects=False,
             ) as response:
                 _raise_for_status(response.status)
-                text = await response.text()
+                raw = await response.content.read(MAX_RESPONSE_BYTES + 1)
         except (aiohttp.ClientError, TimeoutError) as err:
             raise JellyfinConnectionError(str(err) or type(err).__name__) from err
+        if len(raw) > MAX_RESPONSE_BYTES:
+            raise JellyfinConnectionError("Response too large")
+        text = raw.decode("utf-8", errors="replace")
         if not text:
             return None
         try:
@@ -271,7 +294,7 @@ class JellyfinClient:
         )
 
     async def quick_connect_initiate(self) -> QuickConnectRequest:
-        """Open a Quick Connect request; 10.8 servers only accept GET."""
+        """Open a Quick Connect request, falling back to GET on a 405."""
         try:
             result = await self._request("POST", "QuickConnect", "Initiate")
         except JellyfinApiError as err:
@@ -553,36 +576,44 @@ class JellyfinClient:
         except (aiohttp.ClientError, TimeoutError) as err:
             raise JellyfinConnectionError(str(err) or type(err).__name__) from err
 
-    def audio_stream_url(self, item_id: str, audio_codec: str) -> str:
-        """Return a universal audio stream URL carrying the token as api_key."""
-        return str(
-            self.build_url(
-                "Audio",
-                item_id,
-                "universal",
-                params={
-                    "UserId": self._require_user(),
-                    "DeviceId": self._device_id,
-                    "api_key": self.access_token or "",
-                    "MaxStreamingBitrate": "140000000",
-                    "Container": "opus,mp3,aac,m4a,flac,webma,webm,wav,ogg",
-                    "TranscodingContainer": "ts",
-                    "TranscodingProtocol": "http",
-                    "AudioCodec": audio_codec,
-                },
-            )
+    def audio_stream_url(self, item_id: str, audio_codec: str) -> URL:
+        """Return a universal audio stream URL; the token goes in a header."""
+        container, _ = AUDIO_FORMATS.get(audio_codec, AUDIO_FORMATS["mp3"])
+        return self.build_url(
+            "Audio",
+            item_id,
+            "universal",
+            params={
+                "UserId": self._require_user(),
+                "DeviceId": self._device_id,
+                "MaxStreamingBitrate": "140000000",
+                "Container": container,
+                "TranscodingContainer": container,
+                "TranscodingProtocol": "http",
+                "AudioCodec": audio_codec,
+            },
         )
 
-    def video_stream_url(self, item_id: str, media_source_id: str | None) -> str:
-        """Return a static video stream URL carrying the token as api_key."""
+    def video_stream_url(self, item_id: str, media_source_id: str | None) -> URL:
+        """Return a static video stream URL; the token goes in a header."""
         params: dict[str, str | int | bool] = {
             "static": True,
             "DeviceId": self._device_id,
-            "api_key": self.access_token or "",
         }
         if media_source_id:
             params["MediaSourceId"] = media_source_id
-        return str(self.build_url("Videos", item_id, "stream", params=params))
+        return self.build_url("Videos", item_id, "stream", params=params)
+
+    def open_stream(
+        self, url: URL, range_header: str | None
+    ) -> AbstractAsyncContextManager[aiohttp.ClientResponse]:
+        """Open a media stream with the token in the Authorization header."""
+        headers = {"Authorization": self.authorization()}
+        if range_header:
+            headers["Range"] = range_header
+        return self._session.get(
+            url, headers=headers, timeout=STREAM_TIMEOUT, allow_redirects=False
+        )
 
 
 def _quick_connect(result: Any) -> QuickConnectRequest:

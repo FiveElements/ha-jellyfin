@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from homeassistant.config_entries import ConfigEntryState
 from homeassistant.const import CONF_URL, CONF_VERIFY_SSL, __version__ as ha_version
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
@@ -14,6 +15,7 @@ from .const import (
     CLIENT_NAME,
     CONF_ACCESS_TOKEN,
     CONF_CLIENT_DEVICE_ID,
+    CONF_SERVER_ID,
     CONF_USER_ID,
     DOMAIN,
     LOGGER,
@@ -22,6 +24,7 @@ from .const import (
 from .coordinator import JellyfinConfigEntry, JellyfinCoordinator, JellyfinData
 from .entity import client_device_identifier, server_device_info
 from .services import async_setup_services
+from .views import async_register_views
 
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 
@@ -61,8 +64,9 @@ def entry_client(hass: HomeAssistant, entry: JellyfinConfigEntry) -> JellyfinCli
 
 
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
-    """Register the services once for every entry."""
+    """Register the services and relay views once for every entry."""
     async_setup_services(hass)
+    async_register_views(hass)
     return True
 
 
@@ -114,10 +118,15 @@ async def async_remove_config_entry_device(
     device_entry: dr.AnyDeviceEntry,
 ) -> bool:
     """Allow removing a client device that is no longer connected."""
-    coordinator = entry.runtime_data.coordinator
-    live = {coordinator.server_id} | {
-        client_device_identifier(coordinator, key) for key in coordinator.data
-    }
+    if entry.state is not ConfigEntryState.LOADED:
+        # No live sessions to compare with (server down, reauth pending):
+        # every client may go, the server device stays.
+        live = {entry.data[CONF_SERVER_ID]}
+    else:
+        coordinator = entry.runtime_data.coordinator
+        live = {coordinator.server_id} | {
+            client_device_identifier(coordinator, key) for key in coordinator.data
+        }
     return not any(
         domain == DOMAIN and identifier in live
         for domain, identifier in device_entry.identifiers

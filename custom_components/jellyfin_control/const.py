@@ -31,7 +31,8 @@ MIN_SCAN_INTERVAL: Final = 2
 MAX_SCAN_INTERVAL: Final = 300
 
 SUPPORTED_AUDIO_CODECS: Final = ["aac", "mp3", "opus", "flac"]
-DEFAULT_AUDIO_CODEC: Final = "aac"
+# MP3 is the one codec every Cast, Sonos and DLNA renderer plays.
+DEFAULT_AUDIO_CODEC: Final = "mp3"
 
 # 1 tick = 100 ns.
 TICKS_PER_SECOND: Final = 10_000_000
@@ -202,6 +203,6 @@ MEDIA_TYPE_OPTIONS: Final[dict[str, str]] = {
     "tv_channel": "TvChannel",
 }
 
-ITEM_FIELDS: Final = (
-    "PrimaryImageAspectRatio,Overview,MediaSources,ParentId,ChildCount,CollectionType"
-)
+# MediaSources is left out of listings: it carries every stream of every item,
+# which made a 1000-item page weigh megabytes. /Items/{id} returns it anyway.
+ITEM_FIELDS: Final = "PrimaryImageAspectRatio,Overview,ParentId,ChildCount"

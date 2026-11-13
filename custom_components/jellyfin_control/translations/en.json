@@ -4,6 +4,7 @@
       "already_configured": "This Jellyfin server is already configured.",
       "reauth_successful": "Re-authentication was successful.",
       "reconfigure_successful": "Reconfiguration was successful.",
+      "wrong_account": "You signed in as another Jellyfin user. Sign in with the account this entry was set up with, or add a new entry.",
       "unique_id_mismatch": "This address points to a different Jellyfin server.",
       "cannot_connect": "Failed to connect to the Jellyfin server.",
       "quick_connect_disabled": "Quick Connect is disabled on this server. Enable it in the Jellyfin dashboard or sign in with a password."
@@ -169,6 +170,9 @@
     },
     "invalid_option": {
       "message": "Unknown track: {option}."
+    },
+    "power_unsupported": {
+      "message": "Jellyfin cannot turn a client on or off."
     },
     "no_server": {
       "message": "No Jellyfin server is loaded."

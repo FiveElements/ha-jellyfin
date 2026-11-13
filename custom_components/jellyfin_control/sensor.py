@@ -39,6 +39,8 @@ SENSORS: tuple[JellyfinSensorEntityDescription, ...] = (
     JellyfinSensorEntityDescription(
         key="sessions",
         translation_key="sessions",
+        # Secondary to "active clients"; automations rarely need it.
+        entity_registry_enabled_default=False,
         state_class=SensorStateClass.MEASUREMENT,
         value_fn=len,
     ),

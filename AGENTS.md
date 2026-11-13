@@ -94,14 +94,15 @@ them.
 | Module | Role |
 | ------ | ---- |
 | `api.py` | `JellyfinClient`. No Home Assistant import; takes the injected aiohttp session; raises `JellyfinAuthError` (401), `JellyfinForbiddenError` (403), `JellyfinNotFoundError` (404), `JellyfinConnectionError` (transport, redirect, non-JSON), `JellyfinApiError`. |
-| `coordinator.py` | Polls `/Sessions?controllableByUserId=` and keys sessions by **device id**. |
+| `coordinator.py` | Polls `/Sessions?controllableByUserId=` and keys sessions by **device id**; fetches `/Items/{id}` once per playing video that lacks `MediaStreams` (cached, pruned when it stops). |
 | `library.py` | Library tree as `LibraryNode` values, search, folder expansion (`playable_ids`), queue. Shared by media player, media source and actions. |
-| `entity.py` | Base entities, device info, `call_api()` (client error -> translated HA error). |
+| `entity.py` | Base entities, device info, `call_api()` (client error -> translated HA error), `async_add_client_entities()`: every client platform adds entities through it (offline devices restored from the registries, live sessions on each update, ids forgotten on removal so a deleted device comes back). |
 | `media_player.py` | One per device; all controls; entity action handlers (`async_*` methods named in `services.py`). |
 | `remote.py` / `select.py` / `sensor.py` / `button.py` | Navigation, track selection, session counts, library scan. |
-| `media_source.py` | Library as a media source; identifiers are `<entry_id>/<node_id>`. |
+| `media_source.py` | Library as a media source; identifiers are `<entry_id>/<node_id>`; resolves to a `views.py` stream path. |
+| `views.py` | Authenticated HA views relaying artwork and streams (Range pass-through, 404/416 passed, other errors 502); `signed_image_path()` and `stream_path()`. |
 | `services.py` | Entity action registration on the media player domain. |
-| `config_flow.py` | Server, then password or Quick Connect; reauth; reconfigure; options (reload on change). |
+| `config_flow.py` | Server, then password or Quick Connect; reauth (another account aborts with `wrong_account` after revoking the new token); reconfigure; options (reload on change). |
 
 `entry.runtime_data` is `JellyfinData(client, coordinator)`.
 
@@ -121,13 +122,22 @@ them.
   advertises the command.
 - **Features follow `SupportedCommands`.** Never advertise a feature the client
   did not; actions needing an unadvertised command raise
-  `command_unsupported` before calling the server.
+  `command_unsupported` before calling the server. `send_command` and raw
+  remote commands are the deliberate exception: they are sent unfiltered.
 - **Redirects are never followed** and every path segment is percent-encoded
   (`.`/`..` included): the token must not leave for another host or endpoint.
 - **Artwork goes through the Home Assistant proxy** with the integration's
   session (`async_get_media_image`, `async_get_browse_image`); browse
-  thumbnails carry an `ImageRef` key, never a token. Only media-source stream
-  URLs carry `api_key`, because the target player fetches them directly.
+  thumbnails carry an `ImageRef` key, never a token.
+- **The token never appears in a URL.** Media-source streams and thumbnails
+  point to `views.py` (`/api/jellyfin_control/...`, signed by Home Assistant);
+  the view calls Jellyfin with the token in the `Authorization` header.
+  `api.py` stream builders return URLs without `api_key`. A stream that fails
+  after its headers were sent closes the connection (`force_close`) so the
+  player does not wait for missing bytes.
+- **Default audio codec is MP3** (`AUDIO_FORMATS` maps codec to container and
+  MIME type, which `mime_type()` must agree with). `ITEM_FIELDS` deliberately
+  omits `MediaSources`: browse lists stay small; streams use the item id.
 - **Folders are expanded into at most `MAX_QUEUE_ITEMS` (200) ids**: they travel
   in the query string of `POST /Sessions/{id}/Playing`.
 - **Virtual browse ids contain a colon** (`special:resume`, `artists:<lib>`,

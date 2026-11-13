@@ -4,15 +4,18 @@ from __future__ import annotations
 
 from typing import Any, override
 
-from homeassistant.components.select import SelectEntity
-from homeassistant.core import HomeAssistant, callback
+from homeassistant.components.select import (
+    DOMAIN as SELECT_DOMAIN,
+    SelectEntity,
+)
+from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from .api import JsonObject
 from .const import DOMAIN
 from .coordinator import JellyfinConfigEntry, JellyfinCoordinator
-from .entity import JellyfinClientEntity
+from .entity import JellyfinClientEntity, async_add_client_entities
 
 PARALLEL_UPDATES = 0
 
@@ -26,23 +29,15 @@ async def async_setup_entry(
 ) -> None:
     """Add track selectors for each client device."""
     coordinator = entry.runtime_data.coordinator
-    known: set[str] = set()
-
-    @callback
-    def add_new() -> None:
-        new = [key for key in coordinator.data if key not in known]
-        known.update(new)
-        async_add_entities(
-            entity
-            for key in new
-            for entity in (
-                JellyfinTrackSelect(coordinator, key, "Audio"),
-                JellyfinTrackSelect(coordinator, key, "Subtitle"),
-            )
-        )
-
-    add_new()
-    entry.async_on_unload(coordinator.async_add_listener(add_new))
+    async_add_client_entities(
+        entry,
+        SELECT_DOMAIN,
+        async_add_entities,
+        lambda key: [
+            JellyfinTrackSelect(coordinator, key, "Audio"),
+            JellyfinTrackSelect(coordinator, key, "Subtitle"),
+        ],
+    )
 
 
 def stream_label(stream: JsonObject) -> str:

@@ -5,7 +5,7 @@ For each Jellyfin app (device) seen by the server:
 | Entity | Purpose |
 | --- | --- |
 | `media_player.<device>` | State, artwork, metadata and every playback control the app advertises. `off` while the app is disconnected. |
-| `remote.<device>_remote` | Navigation and playback commands (only for apps that accept remote control). |
+| `remote.<device>_remote` | Navigation and playback commands (only for apps that accept remote control). It cannot power the app on or off: `turn_on`/`turn_off` are refused. |
 | `select.<device>_audio_track` | Audio track of the playing item. |
 | `select.<device>_subtitles` | Subtitles of the playing item, with `off`. |
 
@@ -14,7 +14,7 @@ On the server device:
 | Entity | Purpose |
 | --- | --- |
 | `sensor.<server>_active_clients` | Apps playing something. |
-| `sensor.<server>_connected_clients` | Apps connected. |
+| `sensor.<server>_connected_clients` | Apps connected (disabled by default). |
 | `button.<server>_scan_libraries` | Scan every library (enabled by default for administrators only). |
 
 ## Devices
@@ -38,6 +38,6 @@ Features follow the commands the app advertises:
 | Repeat | `SetRepeatMode` |
 | Browse, search | always |
 
-Extra attributes: `session_id`, `user_name`, `client`, `remote_end_point`,
-`queue_size`, `play_method`, `audio_stream_index`, `subtitle_stream_index`,
-`media_type`.
+Extra attributes: `session_id`, `user_name`, `client`, `queue_size`,
+`play_method`, `audio_stream_index`, `subtitle_stream_index`, `media_type`.
+Client IP addresses are not exposed.

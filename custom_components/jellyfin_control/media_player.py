@@ -8,6 +8,7 @@ from typing import Any, cast, override
 from homeassistant.components import media_source
 from homeassistant.components.media_player import (
     ATTR_MEDIA_ENQUEUE,
+    DOMAIN as MP_DOMAIN,
     BrowseMedia,
     MediaPlayerEnqueue,
     MediaPlayerEntity,
@@ -23,9 +24,11 @@ from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.util import dt as dt_util
 
+from .api import JellyfinError
 from .const import (
     CONTENT_TYPE_MAP,
     DOMAIN,
+    LOGGER,
     MAX_IMAGE_BYTES,
     MAX_IMAGE_WIDTH,
     MAX_QUEUE_ITEMS,
@@ -38,7 +41,11 @@ from .coordinator import (
     JellyfinCoordinator,
     supports_media_control,
 )
-from .entity import JellyfinClientEntity, call_api
+from .entity import (
+    JellyfinClientEntity,
+    async_add_client_entities,
+    call_api,
+)
 from .library import (
     ImageRef,
     Library,
@@ -86,16 +93,12 @@ async def async_setup_entry(
 ) -> None:
     """Add a media player for each client device, now and when one appears."""
     coordinator = entry.runtime_data.coordinator
-    known: set[str] = set()
-
-    @callback
-    def add_new() -> None:
-        new = [key for key in coordinator.data if key not in known]
-        known.update(new)
-        async_add_entities(JellyfinMediaPlayer(coordinator, key) for key in new)
-
-    add_new()
-    entry.async_on_unload(coordinator.async_add_listener(add_new))
+    async_add_client_entities(
+        entry,
+        MP_DOMAIN,
+        async_add_entities,
+        lambda key: [JellyfinMediaPlayer(coordinator, key)],
+    )
 
 
 def _ticks_to_seconds(ticks: Any) -> int | None:
@@ -114,7 +117,7 @@ class JellyfinMediaPlayer(JellyfinClientEntity, MediaPlayerEntity):
         """Initialize the player."""
         super().__init__(coordinator, device_key, None)
         self._library = Library(coordinator.client)
-        self._last_position: int | None = None
+        self._last_position: tuple[Any, ...] | None = None
         self._update_attributes()
 
     # -- state ----------------------------------------------------------
@@ -137,9 +140,13 @@ class JellyfinMediaPlayer(JellyfinClientEntity, MediaPlayerEntity):
         item = self.now_playing
         state = self.play_state
         position = _ticks_to_seconds(state.get("PositionTicks")) if item else None
-        if position != self._last_position:
+        # The frontend extrapolates position + (now - updated_at) while
+        # playing. Refreshing the timestamp only when the position moved made
+        # a resume after a long pause jump ahead by the whole pause.
+        marker = (item.get("Id") if item else None, state.get("IsPaused"), position)
+        if marker != self._last_position:
             self._attr_media_position_updated_at = dt_util.utcnow() if item else None
-            self._last_position = position
+            self._last_position = marker
         self._attr_media_position = position
         if volume := state.get("VolumeLevel"):
             self._attr_volume_level = float(volume) / 100
@@ -332,15 +339,17 @@ class JellyfinMediaPlayer(JellyfinClientEntity, MediaPlayerEntity):
     ) -> tuple[bytes | None, str | None]:
         if image is None:
             return None, None
-        result = await call_api(
-            lambda: self.coordinator.client.image(
+        try:
+            result = await self.coordinator.client.image(
                 image.item_id,
                 image.image_type,
                 image.tag,
                 MAX_IMAGE_WIDTH,
                 MAX_IMAGE_BYTES,
             )
-        )
+        except JellyfinError as err:
+            LOGGER.debug("Artwork %s unavailable: %s", image.key(), err)
+            return None, None
         return (None, None) if result is None else result
 
     @property
@@ -356,7 +365,6 @@ class JellyfinMediaPlayer(JellyfinClientEntity, MediaPlayerEntity):
             "session_id": session.get("Id"),
             "user_name": session.get("UserName"),
             "client": session.get("Client"),
-            "remote_end_point": session.get("RemoteEndPoint"),
             "queue_size": len(queue),
             "play_method": state.get("PlayMethod"),
             "audio_stream_index": state.get("AudioStreamIndex"),
@@ -464,8 +472,16 @@ class JellyfinMediaPlayer(JellyfinClientEntity, MediaPlayerEntity):
                 translation_placeholders={"media_id": media_id},
             )
         identifier = media_id[len(prefix) :]
-        # Media-source identifiers are <entry_id>/<item_id>.
-        return identifier.rsplit("/", 1)[-1]
+        # Media-source identifiers are <entry_id>/<item_id>; an item of
+        # another server would be looked up here and reported missing.
+        entry_id, _, item_id = identifier.rpartition("/")
+        if entry_id and entry_id != self.coordinator.config_entry.entry_id:
+            raise ServiceValidationError(
+                translation_domain=DOMAIN,
+                translation_key="unsupported_media_source",
+                translation_placeholders={"media_id": media_id},
+            )
+        return item_id
 
     @override
     async def async_play_media(

@@ -230,7 +230,7 @@ async def test_play_media(
         hass,
         "play_media",
         **{
-            ATTR_MEDIA_CONTENT_ID: "media-source://jellyfin_control/entry/alb1",
+            ATTR_MEDIA_CONTENT_ID: f"media-source://jellyfin_control/{loaded.entry_id}/alb1",
             ATTR_MEDIA_CONTENT_TYPE: "album",
             ATTR_MEDIA_ENQUEUE: "next",
         },
@@ -249,6 +249,16 @@ async def test_play_media(
                 ATTR_MEDIA_CONTENT_TYPE: "music",
             },
         )
+    # An item of another Jellyfin server is refused, not looked up here.
+    with pytest.raises(ServiceValidationError, match="own library"):
+        await mp(
+            hass,
+            "play_media",
+            **{
+                ATTR_MEDIA_CONTENT_ID: "media-source://jellyfin_control/other/alb1",
+                ATTR_MEDIA_CONTENT_TYPE: "album",
+            },
+        )
     with pytest.raises(ServiceValidationError):
         await mp(
             hass,
@@ -263,10 +273,32 @@ async def test_play_media(
 @pytest.mark.parametrize(
     ("item", "expected"),
     [
-        ("art1", {"AlbumArtistIds": "art1"}),
-        ("gen1", {"GenreIds": "gen1"}),
-        ("pl1", {"ParentId": "pl1"}),
-        ("ser1", {"ParentId": "ser1"}),
+        (
+            "art1",
+            {
+                "ArtistIds": "art1",
+                "IncludeItemTypes": "Audio",
+                "SortBy": "ProductionYear,Album,ParentIndexNumber,IndexNumber,SortName",
+            },
+        ),
+        (
+            "gen1",
+            {"GenreIds": "gen1", "IncludeItemTypes": "Audio", "MediaTypes": "Audio"},
+        ),
+        ("pl1", {"ParentId": "pl1", "IsFolder": "false"}),
+        (
+            "ser1",
+            {"ParentId": "ser1", "SortBy": "ParentIndexNumber,IndexNumber,SortName"},
+        ),
+        (
+            "lib_other",
+            {
+                "ParentId": "lib_other",
+                "Recursive": "true",
+                "IsFolder": "false",
+                "SortBy": "Album,ParentIndexNumber,IndexNumber,SortName",
+            },
+        ),
     ],
 )
 async def test_containers_are_expanded(
@@ -446,7 +478,7 @@ async def test_queue(
         ("special:resume", "/UserItems/Resume", 1),
         ("special:next_up", "/Shows/NextUp", 1),
         ("special:latest", "/Items/Latest", 1),
-        ("special:favorites", "/Items", 2),
+        ("special:favorites", "/Artists", 3),
         ("ser1", "/Shows/ser1/Seasons", 1),
         ("sea1", "/Shows/ser1/Episodes", 2),
         ("art1", "/Items", 2),

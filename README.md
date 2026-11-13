@@ -29,7 +29,7 @@ next to the official `jellyfin` integration without conflict (its domain is
 | Volume set, mute | yes | yes |
 | Volume up / down | no | yes |
 | Shuffle and repeat modes | no | yes |
-| Enqueue (play now, next, last) | partial | yes; folders, series, albums, artists, genres and playlists are expanded into a queue |
+| Enqueue (play now, next, last) | yes (single item) | yes; folders, series, albums, artists, genres and playlists are expanded into a queue |
 | Audio and subtitle track selection | no | `select` entities and actions |
 | Remote navigation | blocking, raw names | async, with aliases (`up`, `home`, `info`...) and every general command |
 | Messages, text input, open an item page on the TV | no | yes |
@@ -41,7 +41,7 @@ next to the official `jellyfin` integration without conflict (its domain is
 | Scan libraries | no | button (administrators) |
 | Entities survive a client restart | no (keyed on session id) | yes (keyed on device id); a disconnected client reads `off` |
 | Credentials stored | username and password | an access token only; sign in by password or Quick Connect; the token is revoked when the entry is deleted |
-| Stream to other players (media source) | yes | yes |
+| Stream to other players (media source) | yes (URL carries the token) | yes, relayed by Home Assistant: the token never leaves it |
 
 ## Install
 
@@ -78,7 +78,7 @@ starts a **re-authentication**.
 | Option | Default | Meaning |
 | --- | --- | --- |
 | Polling interval | 5 s | How often sessions are read (2-300 s). |
-| Audio streaming codec | AAC | Codec used when library music is streamed to another Home Assistant player through the media source. |
+| Audio streaming codec | MP3 | Codec (MP3, AAC, Opus, FLAC) used when library music is streamed to another Home Assistant player through the media source. |
 
 ## Entities
 
@@ -87,7 +87,7 @@ For each Jellyfin app (device) seen by the server:
 | Entity | Purpose |
 | --- | --- |
 | `media_player.<device>` | State, artwork, metadata and every playback control the app advertises. `off` while the app is disconnected. |
-| `remote.<device>_remote` | Navigation and playback commands (only for apps that accept remote control). |
+| `remote.<device>_remote` | Navigation and playback commands (only for apps that accept remote control). It cannot power the app on or off: `turn_on`/`turn_off` are refused. |
 | `select.<device>_audio_track` | Audio track of the playing item. |
 | `select.<device>_subtitles` | Subtitles of the playing item, with `off`. |
 
@@ -96,7 +96,7 @@ On the server device:
 | Entity | Purpose |
 | --- | --- |
 | `sensor.<server>_active_clients` | Apps playing something. |
-| `sensor.<server>_connected_clients` | Apps connected. |
+| `sensor.<server>_connected_clients` | Apps connected (disabled by default). |
 | `button.<server>_scan_libraries` | Scan every library (enabled by default for administrators only). |
 
 ## Actions
@@ -121,7 +121,7 @@ All take a `jellyfin_control` media player as target.
 
 Remote commands accept these aliases: `up`, `down`, `left`, `right`, `select`
 (`ok`), `back`, `home`, `menu`, `info` (`osd`), `stats`, `fullscreen`,
-`settings`, `search`, `page_up`, `page_down`, `channel_up`, `channel_down`,
+`settings`, `search`, `context_menu`, `page_up`, `page_down`, `channel_up`, `channel_down`,
 `guide`, `volume_up`, `volume_down`, `mute`, `play_pause`, `play`, `pause`,
 `stop`, `next`, `previous`, `rewind`, `fast_forward`. Any other name is sent
 as a Jellyfin general command.
@@ -158,7 +158,11 @@ More in the [documentation](https://fiveelements.github.io/ha-jellyfin/).
 - Jellyfin clients only play items of **their own library**: media sources of
   other integrations (TTS, local files) cannot be sent to them.
 - A folder is expanded into at most **200 items** (URL length), the media
-  browser lists at most **1000 children** per folder.
+  browser lists at most **1000 children** per folder, *Recently added* the
+  **100** newest items.
+- `search_library` returns **50** items by default, at most **500**.
+- `send_command` and raw remote commands are sent as they are: the client
+  ignores a command it does not know.
 - Scanning libraries needs an **administrator** account.
 - Jellyfin has no discovery protocol Home Assistant can use: the address is
   entered by hand.
@@ -188,6 +192,13 @@ HACS) and restart.
 ## Privacy
 
 The integration talks only to your Jellyfin server. The access token never
-appears in logs or diagnostics; artwork is proxied through Home Assistant.
-Media-source stream URLs carry the token as `api_key` because the target
-player fetches them directly - this is how Jellyfin streams work.
+appears in logs, diagnostics or URLs:
+
+- artwork is fetched by Home Assistant and served from its own address;
+- media-source streams and thumbnails are relayed by Home Assistant through
+  short-lived signed `/api/jellyfin_control/...` paths, so a Cast device or a
+  browser never sees the token, and only reaches Home Assistant.
+
+Diagnostics hide the token, the user id and client addresses. The media
+player exposes the Jellyfin user name of each session as an attribute; client
+IP addresses are not exposed.

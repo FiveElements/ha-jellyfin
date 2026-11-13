@@ -20,6 +20,7 @@ from .conftest import (
     BASE_URL,
     TOKEN,
     USER_ID,
+    FakeContent,
     FakeJellyfin,
     FakeSession,
     connection_error,
@@ -47,9 +48,20 @@ def test_normalize_url() -> None:
 def test_authorization_header_is_sanitized() -> None:
     c = client(FakeJellyfin(), access_token='to"ken,')
     header = c.authorization()
-    assert 'Device="Home Assistant main"' in header
-    assert header.endswith('Token="token"')
-    assert 'to"ken' not in repr(c) and "token" not in repr(c)
+    # Jellyfin URL-decodes each value: encoding keeps the syntax intact
+    # without altering what the server reads.
+    assert 'Device="Home %22Assistant%22%2C main"' in header
+    assert header.endswith('Token="to%22ken%2C"')
+    assert "ken" not in repr(c)
+    plus = JellyfinClient(
+        FakeSession(FakeJellyfin()),  # type: ignore[arg-type]
+        BASE_URL,
+        device_id="d",
+        device_name="a+b%41",
+        client_name="c",
+        client_version="1",
+    )
+    assert 'Device="a%2Bb%2541"' in plus.authorization()
 
 
 def test_secrets_are_not_in_repr() -> None:
@@ -153,7 +165,7 @@ async def test_invalid_json_text() -> None:
     class Raw(FakeSession):
         def request(self, *args, **kwargs):  # type: ignore[no-untyped-def]
             response = super().request(*args, **kwargs)
-            response._raw = b"<html>proxy</html>"
+            response.content = FakeContent(b"<html>proxy</html>")
             return response
 
     c._session = Raw(server)  # type: ignore[assignment]
@@ -203,7 +215,7 @@ async def test_images() -> None:
 
 async def test_image_larger_than_announced() -> None:
     server = FakeJellyfin(image=b"x" * 10)
-    c = client(server)
+    c = client(server, access_token=TOKEN)
 
     class Lying(FakeSession):
         def request(self, *args, **kwargs):  # type: ignore[no-untyped-def]
@@ -215,14 +227,40 @@ async def test_image_larger_than_announced() -> None:
     assert await c.image("i", "Primary", None, 100, 5) is None
 
 
-def test_stream_urls_carry_token() -> None:
+def test_stream_urls_never_carry_token() -> None:
     c = client(FakeJellyfin(), access_token=TOKEN, user_id=USER_ID)
-    audio = c.audio_stream_url("song1", "mp3")
-    assert "/Audio/song1/universal" in audio and f"api_key={TOKEN}" in audio
-    assert "AudioCodec=mp3" in audio
-    video = c.video_stream_url("mov1", "ms2")
+    audio = str(c.audio_stream_url("song1", "opus"))
+    assert "/Audio/song1/universal" in audio and TOKEN not in audio
+    assert "AudioCodec=opus" in audio and "TranscodingContainer=ogg" in audio
+    assert "Container=ogg" in audio
+    assert "Container=mp3" in str(c.audio_stream_url("song1", "unknown"))
+    video = str(c.video_stream_url("mov1", "ms2"))
     assert "static=true" in video and "MediaSourceId=ms2" in video
-    assert "MediaSourceId" not in c.video_stream_url("mov1", None)
+    assert TOKEN not in video
+    assert "MediaSourceId" not in str(c.video_stream_url("mov1", None))
+
+
+async def test_open_stream_sends_token_in_header() -> None:
+    server = FakeJellyfin()
+    c = client(server, access_token=TOKEN, user_id=USER_ID)
+    async with c.open_stream(c.video_stream_url("mov1", None), "bytes=4-") as r:
+        assert r.status == 206
+    call = server.last("GET", "/Videos/mov1/stream")
+    assert call.headers["Range"] == "bytes=4-"
+    assert TOKEN in call.headers["Authorization"]
+    assert call.options["allow_redirects"] is False
+
+
+async def test_requests_never_follow_redirects() -> None:
+    server = FakeJellyfin()
+    await client(server).public_info()
+    assert server.calls[-1].options["allow_redirects"] is False
+
+
+async def test_response_size_is_capped(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("custom_components.jellyfin_control.api.MAX_RESPONSE_BYTES", 10)
+    with pytest.raises(JellyfinConnectionError, match="too large"):
+        await client(FakeJellyfin()).public_info()
 
 
 async def test_user_data_endpoints() -> None:
@@ -232,7 +270,12 @@ async def test_user_data_endpoints() -> None:
     await c.set_played("mov1", False)
     await c.set_favorite("mov1", True)
     await c.set_favorite("mov1", False)
-    assert [x.method for x in server.calls_to("POST", "/UserPlayedItems/mov1")]
-    assert server.calls_to("DELETE", "/UserFavoriteItems/mov1")
+    assert [(x.method, x.path) for x in server.calls[-4:]] == [
+        ("POST", "/UserPlayedItems/mov1"),
+        ("DELETE", "/UserPlayedItems/mov1"),
+        ("POST", "/UserFavoriteItems/mov1"),
+        ("DELETE", "/UserFavoriteItems/mov1"),
+    ]
+    assert all(x.params == {"userId": USER_ID} for x in server.calls[-4:])
     await c.logout()
     assert server.calls_to("POST", "/Sessions/Logout")

@@ -4,6 +4,7 @@
       "already_configured": "Ce serveur Jellyfin est déjà configuré.",
       "reauth_successful": "La réauthentification a réussi.",
       "reconfigure_successful": "La reconfiguration a réussi.",
+      "wrong_account": "Vous vous êtes connecté avec un autre utilisateur Jellyfin. Utilisez le compte de cette entrée, ou ajoutez une nouvelle entrée.",
       "unique_id_mismatch": "Cette adresse désigne un autre serveur Jellyfin.",
       "cannot_connect": "Impossible de joindre le serveur Jellyfin.",
       "quick_connect_disabled": "Quick Connect est désactivé sur ce serveur. Activez-le dans le tableau de bord Jellyfin ou connectez-vous avec un mot de passe."
@@ -169,6 +170,9 @@
     },
     "invalid_option": {
       "message": "Piste inconnue : {option}."
+    },
+    "power_unsupported": {
+      "message": "Jellyfin ne peut pas allumer ou éteindre un client."
     },
     "no_server": {
       "message": "Aucun serveur Jellyfin n'est chargé."

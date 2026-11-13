@@ -12,14 +12,20 @@ from homeassistant.components.remote import (
     ATTR_NUM_REPEATS,
     DEFAULT_DELAY_SECS,
     DEFAULT_NUM_REPEATS,
+    DOMAIN as REMOTE_DOMAIN,
     RemoteEntity,
 )
-from homeassistant.core import HomeAssistant, callback
+from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
-from .const import PLAYSTATE_COMMANDS, REMOTE_ALIASES
+from .const import DOMAIN, PLAYSTATE_COMMANDS, REMOTE_ALIASES
 from .coordinator import JellyfinConfigEntry, JellyfinCoordinator
-from .entity import JellyfinClientEntity, call_api
+from .entity import (
+    JellyfinClientEntity,
+    async_add_client_entities,
+    call_api,
+)
 
 PARALLEL_UPDATES = 0
 
@@ -31,20 +37,13 @@ async def async_setup_entry(
 ) -> None:
     """Add a remote for each remotely controllable client."""
     coordinator = entry.runtime_data.coordinator
-    known: set[str] = set()
-
-    @callback
-    def add_new() -> None:
-        new = [
-            key
-            for key, session in coordinator.data.items()
-            if key not in known and session.get("SupportsRemoteControl")
-        ]
-        known.update(new)
-        async_add_entities(JellyfinRemote(coordinator, key) for key in new)
-
-    add_new()
-    entry.async_on_unload(coordinator.async_add_listener(add_new))
+    async_add_client_entities(
+        entry,
+        REMOTE_DOMAIN,
+        async_add_entities,
+        lambda key: [JellyfinRemote(coordinator, key)],
+        include=lambda session: bool(session.get("SupportsRemoteControl")),
+    )
 
 
 def resolve_command(command: str) -> str:
@@ -72,6 +71,20 @@ class JellyfinRemote(JellyfinClientEntity, RemoteEntity):
     def available(self) -> bool:
         """Stay available so the state reads off rather than unavailable."""
         return self.coordinator.last_update_success
+
+    @override
+    async def async_turn_on(self, **kwargs: Any) -> None:
+        """Jellyfin cannot power a client on or off."""
+        raise ServiceValidationError(
+            translation_domain=DOMAIN, translation_key="power_unsupported"
+        )
+
+    @override
+    async def async_turn_off(self, **kwargs: Any) -> None:
+        """Jellyfin cannot power a client on or off."""
+        raise ServiceValidationError(
+            translation_domain=DOMAIN, translation_key="power_unsupported"
+        )
 
     @override
     async def async_send_command(self, command: Iterable[str], **kwargs: Any) -> None:

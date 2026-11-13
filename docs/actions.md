@@ -20,7 +20,7 @@ All take a `jellyfin_control` media player as target.
 
 Remote commands accept these aliases: `up`, `down`, `left`, `right`, `select`
 (`ok`), `back`, `home`, `menu`, `info` (`osd`), `stats`, `fullscreen`,
-`settings`, `search`, `page_up`, `page_down`, `channel_up`, `channel_down`,
+`settings`, `search`, `context_menu`, `page_up`, `page_down`, `channel_up`, `channel_down`,
 `guide`, `volume_up`, `volume_down`, `mute`, `play_pause`, `play`, `pause`,
 `stop`, `next`, `previous`, `rewind`, `fast_forward`. Any other name is sent
 as a Jellyfin general command.
@@ -45,6 +45,29 @@ actions:
 ```
 
 More in the [documentation](https://fiveelements.github.io/ha-jellyfin/).
+
+## Fields
+
+| Action | Fields |
+| --- | --- |
+| `play_items` | `item_ids` (required, comma separated), `enqueue` (`play` default, `next`, `add`, `replace`), `shuffle` (default false), `start_index`, `start_position` (seconds) |
+| `play_media_shuffle` | `media` (required, media selector) |
+| `play_instant_mix` | `item_id` (required) |
+| `seek_relative` | `seconds` (required, negative goes back) |
+| `send_message` | `message` (required), `title`, `timeout` (seconds, default 5) |
+| `send_text` | `text` (required) |
+| `send_command` | `command` (required, Jellyfin general command name), `arguments` (object) |
+| `display_content` | `item_id` (required) |
+| `set_audio_stream`, `set_subtitle_stream` | `index` (required; `-1` turns subtitles off) |
+| `set_user_data` | `item_id` (required), `played`, `favorite` |
+| `browse_library` | `parent_id` (root when empty) |
+| `search_library` | `query` (required), `media_types`, `limit` (default 50, 1-500) |
+| `get_queue` | none |
+
+An action needing a command the client does not advertise (for example
+`seek_relative` without seek support, track selection without
+`SetAudioStreamIndex`) is refused before anything is sent. `send_command` and
+raw remote commands are the escape hatch and are never filtered.
 
 ## Responses
 

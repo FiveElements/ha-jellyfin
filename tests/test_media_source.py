@@ -41,7 +41,11 @@ async def test_browse_and_resolve(
     movie = library.children[0]
     assert movie.can_play is True
     assert movie.media_content_type == "video/mp4"
-    assert movie.thumbnail.endswith("/Items/mov1/Images/Backdrop?maxWidth=600&tag=bd1")
+    # Thumbnails go through the signed Home Assistant relay, never to the
+    # Jellyfin host the browser may not reach.
+    assert movie.thumbnail.startswith(
+        f"/api/jellyfin_control/{loaded.entry_id}/image/mov1/Backdrop/bd1?authSig="
+    )
     assert TOKEN not in movie.thumbnail
     shows = await media_source.async_browse_media(
         hass, f"media-source://{DOMAIN}/{loaded.entry_id}/lib_shows"
@@ -52,14 +56,16 @@ async def test_browse_and_resolve(
         hass, f"media-source://{DOMAIN}/{loaded.entry_id}/mov1", None
     )
     assert resolved.mime_type == "video/mp4"
-    assert "/Videos/mov1/stream" in resolved.url and "MediaSourceId=ms2" in resolved.url
+    assert f"/api/jellyfin_control/{loaded.entry_id}/stream/mov1" in resolved.url
+    assert TOKEN not in resolved.url
 
-    hass.config_entries.async_update_entry(loaded, options={CONF_AUDIO_CODEC: "mp3"})
+    hass.config_entries.async_update_entry(loaded, options={CONF_AUDIO_CODEC: "opus"})
     resolved = await media_source.async_resolve_media(
         hass, f"media-source://{DOMAIN}/song1", None
     )
-    assert resolved.mime_type == "audio/flac"
-    assert "AudioCodec=mp3" in resolved.url
+    # Audio is served in the configured codec, so the type follows it.
+    assert resolved.mime_type == "audio/ogg"
+    assert f"/api/jellyfin_control/{loaded.entry_id}/stream/song1" in resolved.url
 
 
 async def test_errors(
