@@ -8,6 +8,8 @@ All take a `jellyfin_control` media player as target.
 | `jellyfin_control.play_media_shuffle` | Play an item or folder shuffled. |
 | `jellyfin_control.play_instant_mix` | Play a mix built from a song, album, artist or genre. |
 | `jellyfin_control.seek_relative` | Move by ± seconds. |
+| `jellyfin_control.seek_chapter` | Go to the `next` or `previous` chapter, or to a chapter by index. |
+| `jellyfin_control.get_chapters` | **Returns** the chapters of the playing item and the current one. |
 | `jellyfin_control.send_message` | Show a message on the TV. |
 | `jellyfin_control.send_text` | Type into the focused field (search box). |
 | `jellyfin_control.send_command` | Any general command, with arguments. |
@@ -54,6 +56,8 @@ More in the [documentation](https://fiveelements.github.io/ha-jellyfin/).
 | `play_media_shuffle` | `media` (required, media selector) |
 | `play_instant_mix` | `item_id` (required) |
 | `seek_relative` | `seconds` (required, negative goes back) |
+| `seek_chapter` | `chapter` (required: `next`, `previous` or an index from `get_chapters`, 0 is the first) |
+| `get_chapters` | none |
 | `send_message` | `message` (required), `title`, `timeout` (seconds, default 5) |
 | `send_text` | `text` (required) |
 | `send_command` | `command` (required, Jellyfin general command name), `arguments` (object) |
@@ -90,3 +94,8 @@ items:
 
 `get_queue` returns `position`, `id`, `title`, `type` and `current` for each
 queue entry.
+
+`get_chapters` returns `position` (seconds), `current` (index of the chapter
+being played, empty without chapters) and `chapters`, each with `index`,
+`name` and `start` (seconds). Chapters are read from the item on each call:
+sessions do not carry them.

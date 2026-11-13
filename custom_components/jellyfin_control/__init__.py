@@ -31,6 +31,7 @@ from .entity import (
     client_device_identifier,
     server_device_info,
 )
+from .llm_api import async_register_llm_api
 from .services import async_setup_services
 from .views import async_register_views
 
@@ -72,9 +73,10 @@ def entry_client(hass: HomeAssistant, entry: JellyfinConfigEntry) -> JellyfinCli
 
 
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
-    """Register the services and relay views once for every entry."""
+    """Register the services, relay views and LLM API once for every entry."""
     async_setup_services(hass)
     async_register_views(hass)
+    async_register_llm_api(hass)
     return True
 
 

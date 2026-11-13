@@ -110,6 +110,8 @@ All take a `jellyfin_control` media player as target.
 | `jellyfin_control.play_media_shuffle` | Play an item or folder shuffled. |
 | `jellyfin_control.play_instant_mix` | Play a mix built from a song, album, artist or genre. |
 | `jellyfin_control.seek_relative` | Move by ± seconds. |
+| `jellyfin_control.seek_chapter` | Go to the `next` or `previous` chapter, or to a chapter by index. |
+| `jellyfin_control.get_chapters` | **Returns** the chapters of the playing item and the current one. |
 | `jellyfin_control.send_message` | Show a message on the TV. |
 | `jellyfin_control.send_text` | Type into the focused field (search box). |
 | `jellyfin_control.send_command` | Any general command, with arguments. |
@@ -147,6 +149,19 @@ actions:
 ```
 
 More in the [documentation](https://fiveelements.github.io/ha-jellyfin/).
+
+## Assist and MCP
+
+The integration registers an LLM API, **Jellyfin Control**, with one tool per
+control: players and their status, search, browse, play, queue, playback,
+seek (by position or ± a duration), chapters, volume, shuffle and repeat,
+subtitles (`off`, an index or a language), audio track, instant mix,
+messages, remote navigation, text, item pages, played and favorite, library
+scan. Assist alone cannot change subtitles or tracks: it has no intent for
+them. Select **Jellyfin Control** (next to Assist) in a conversation agent or
+in the options of the **Model Context Protocol Server** integration. Only
+media players exposed to Assist can be targeted. See
+[Assist and MCP](https://fiveelements.github.io/ha-jellyfin/assist/).
 
 ## Data updates and limits
 

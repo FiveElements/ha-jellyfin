@@ -28,6 +28,8 @@
     "set_audio_stream": { "service": "mdi:speaker-message" },
     "set_subtitle_stream": { "service": "mdi:subtitles" },
     "set_user_data": { "service": "mdi:heart-check" },
+    "seek_chapter": { "service": "mdi:skip-next-circle-outline" },
+    "get_chapters": { "service": "mdi:format-list-numbered" },
     "get_queue": { "service": "mdi:playlist-music" },
     "browse_library": { "service": "mdi:folder-play" },
     "search_library": { "service": "mdi:movie-search" }

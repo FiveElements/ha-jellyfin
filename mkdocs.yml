@@ -66,6 +66,7 @@ nav:
   - Configuration: configuration.md
   - Entities: entities.md
   - Actions: actions.md
+  - Assist and MCP: assist.md
   - Library browsing: library.md
   - Examples: examples.md
   - Troubleshooting: troubleshooting.md

@@ -150,6 +150,15 @@
     }
   },
   "exceptions": {
+    "nothing_playing": {
+      "message": "Nothing is playing on this Jellyfin client."
+    },
+    "no_chapters": {
+      "message": "The playing item has no chapters."
+    },
+    "no_such_chapter": {
+      "message": "There is no chapter \"{chapter}\" in the playing item."
+    },
     "cannot_connect": {
       "message": "Cannot reach the Jellyfin server: {error}"
     },
@@ -333,6 +342,20 @@
           "description": "Add to (on) or remove from (off) favorites."
         }
       }
+    },
+    "seek_chapter": {
+      "name": "Go to a chapter",
+      "description": "Goes to the next or previous chapter of the playing item, or to a chapter by index.",
+      "fields": {
+        "chapter": {
+          "name": "Chapter",
+          "description": "next, previous, or a chapter index from Get chapters (0 is the first)."
+        }
+      }
+    },
+    "get_chapters": {
+      "name": "Get chapters",
+      "description": "Returns the chapters of the playing item (index, name, start in seconds) and the current one."
     },
     "get_queue": {
       "name": "Get queue",

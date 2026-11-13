@@ -422,8 +422,8 @@ class JellyfinMediaPlayer(JellyfinClientEntity, MediaPlayerEntity):
         """Seek to a position in seconds."""
         await self.async_playstate("Seek", int(position * TICKS_PER_SECOND))
 
-    async def async_seek_relative(self, seconds: float) -> None:
-        """Seek forward or backward from the current position."""
+    def _current_ticks(self) -> int:
+        """Return the playback position now, in ticks."""
         current = int(self.play_state.get("PositionTicks") or 0)
         # The position is as old as the last poll (up to the scan interval):
         # while playing, add the time elapsed since, as the frontend does.
@@ -431,10 +431,80 @@ class JellyfinMediaPlayer(JellyfinClientEntity, MediaPlayerEntity):
         if self.state == MediaPlayerState.PLAYING and updated is not None:
             elapsed = (dt_util.utcnow() - updated).total_seconds()
             current += int(max(0.0, elapsed) * TICKS_PER_SECOND)
-        target = current + int(seconds * TICKS_PER_SECOND)
+        return current
+
+    async def async_seek_relative(self, seconds: float) -> None:
+        """Seek forward or backward from the current position."""
+        target = self._current_ticks() + int(seconds * TICKS_PER_SECOND)
         if duration := (self.now_playing or {}).get("RunTimeTicks"):
             target = min(target, int(duration))
         await self.async_playstate("Seek", max(0, target))
+
+    async def _chapter_starts(self) -> list[tuple[int, str]]:
+        """Return the start (ticks) and name of each chapter of the item."""
+        item = self.now_playing
+        if not item or not item.get("Id"):
+            raise ServiceValidationError(
+                translation_domain=DOMAIN, translation_key="nothing_playing"
+            )
+        item_id = str(item["Id"])
+        # Sessions do not carry chapters; the item itself does.
+        details = await call_api(lambda: self.coordinator.client.item(item_id))
+        chapters = details.get("Chapters") or []
+        return sorted(
+            (int(c["StartPositionTicks"]), str(c.get("Name") or ""))
+            for c in chapters
+            if isinstance(c, dict) and c.get("StartPositionTicks") is not None
+        )
+
+    @staticmethod
+    def _chapter_at(starts: list[tuple[int, str]], ticks: int) -> int:
+        """Return the index of the chapter containing a position."""
+        current = 0
+        for index, (start, _) in enumerate(starts):
+            if start <= ticks:
+                current = index
+        return current
+
+    async def async_get_chapters(self) -> ServiceResponse:
+        """Return the chapters of the playing item and the current one."""
+        starts = await self._chapter_starts()
+        position = self._current_ticks()
+        return cast(
+            ServiceResponse,
+            {
+                "position": position // TICKS_PER_SECOND,
+                "current": self._chapter_at(starts, position) if starts else None,
+                "chapters": [
+                    {"index": i, "name": name, "start": start // TICKS_PER_SECOND}
+                    for i, (start, name) in enumerate(starts)
+                ],
+            },
+        )
+
+    async def async_seek_chapter(self, chapter: str) -> None:
+        """Go to the next or previous chapter, or to a chapter by index."""
+        starts = await self._chapter_starts()
+        if not starts:
+            raise ServiceValidationError(
+                translation_domain=DOMAIN, translation_key="no_chapters"
+            )
+        current = self._chapter_at(starts, self._current_ticks())
+        if chapter == "next":
+            index = current + 1
+        elif chapter == "previous":
+            index = current - 1
+        elif chapter.lstrip("-").isdigit():
+            index = int(chapter)
+        else:
+            index = -1
+        if not 0 <= index < len(starts):
+            raise ServiceValidationError(
+                translation_domain=DOMAIN,
+                translation_key="no_such_chapter",
+                translation_placeholders={"chapter": chapter},
+            )
+        await self.async_playstate("Seek", starts[index][0])
 
     @override
     async def async_set_volume_level(self, volume: float) -> None:
