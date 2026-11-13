@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import base64
-import time
+import threading
 from typing import Any
 from unittest.mock import patch
 
@@ -191,15 +191,21 @@ async def test_public_address_is_not_looked_up(
 async def test_slow_reverse_dns_does_not_hold_the_poll(
     hass: HomeAssistant, fake: FakeJellyfin, loaded: MockConfigEntry
 ) -> None:
-    def slow(address: str) -> str:
-        time.sleep(0.2)
+    release = threading.Event()
+
+    def stuck(address: str) -> str:
+        release.wait(5)
         return "late"
 
     coordinator = loaded.runtime_data.coordinator
     fake.sessions = [make_session(RemoteEndPoint="192.168.1.99")]
     with (
         patch(f"{COORDINATOR}.HOST_NAME_TIMEOUT", 0.01),
-        patch(f"{COORDINATOR}._lookup_host_name", side_effect=slow),
+        patch(f"{COORDINATOR}._lookup_host_name", side_effect=stuck),
     ):
-        await refresh(hass, loaded)
-    assert coordinator.host_name(fake.sessions[0]) is None
+        await coordinator.async_refresh()
+        # The poll finished while the lookup is still running.
+        assert coordinator.last_update_success
+        assert coordinator.host_name(fake.sessions[0]) is None
+        release.set()
+        await hass.async_block_till_done()
