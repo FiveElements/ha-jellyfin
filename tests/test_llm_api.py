@@ -11,6 +11,8 @@ from pytest_homeassistant.common import MockConfigEntry
 
 from custom_components.jellyfin_control.llm_api import (
     LLM_API_ID,
+    VOICE_API_ID,
+    VOICE_TOOLS,
     Player,
     ToolError,
     normalize,
@@ -108,7 +110,17 @@ async def test_api_registered(hass: HomeAssistant, assist: MockConfigEntry) -> N
     } <= names
     assert all(t.integration == "jellyfin_control" for t in api.tools)
     assert "Living room (media_player.living_room)" in api.api_prompt
-    read_only = {t.name for t in api.tools if t.annotations.read_only}
+
+
+async def test_voice_api(hass: HomeAssistant, assist: MockConfigEntry) -> None:
+    full = await llm.async_get_api(hass, LLM_API_ID, context())
+    voice = await llm.async_get_api(hass, VOICE_API_ID, context())
+    names = {t.name for t in voice.tools}
+    assert names == VOICE_TOOLS
+    assert names < {t.name for t in full.tools}
+    assert "jellyfin_navigate" not in names
+    assert "Living room (media_player.living_room)" in voice.api_prompt
+    read_only = {t.name for t in full.tools if t.annotations.read_only}
     assert read_only == {
         "jellyfin_get_players",
         "jellyfin_search",

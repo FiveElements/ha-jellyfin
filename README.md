@@ -160,7 +160,8 @@ messages, remote navigation, text, item pages, played and favorite, library
 scan. Assist alone cannot change subtitles or tracks: it has no intent for
 them. Select **Jellyfin Control** (next to Assist) in a conversation agent or
 in the options of the **Model Context Protocol Server** integration. Only
-media players exposed to Assist can be targeted. See
+media players exposed to Assist can be targeted. **Jellyfin Control
+(voice)** keeps only the 12 spoken controls, for faster voice assistants. See
 [Assist and MCP](https://fiveelements.github.io/ha-jellyfin/assist/).
 
 ## Data updates and limits
