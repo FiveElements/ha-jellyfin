@@ -13,6 +13,13 @@ but not turn them off. The integration therefore registers its own LLM API,
 - **Conversation agents** (OpenAI, Anthropic, Ollama...): select
   **Jellyfin Control** in the agent's *Control Home Assistant* options.
 
+**Jellyfin Control (voice)** is the same API with only the controls people
+say out loud: every tool below except `jellyfin_seek_chapter`,
+`jellyfin_instant_mix`, `jellyfin_show_message`, `jellyfin_navigate`,
+`jellyfin_send_text`, `jellyfin_display_item`, `jellyfin_set_user_data` and
+`jellyfin_scan_library`. Each tool definition is sent to the model on every
+step, so a voice assistant answers faster with 12 tools than with 20.
+
 Only media players **exposed to Assist** (*Settings > Voice assistants >
 Expose*) can be targeted, as with the Assist API. The tools run the
 integration's actions as the requesting user, with the same checks: a

@@ -51,6 +51,26 @@ from .const import DOMAIN, MAX_BROWSE_ITEMS, MAX_SEARCH_RESULTS
 
 LLM_API_ID = DOMAIN
 LLM_API_NAME = "Jellyfin Control"
+# Every tool weighs on each step of the model: a voice assistant gets the
+# controls people actually say out loud, not the remote keys or admin ones.
+VOICE_API_ID = f"{DOMAIN}_voice"
+VOICE_API_NAME = "Jellyfin Control (voice)"
+VOICE_TOOLS = frozenset(
+    {
+        "jellyfin_get_players",
+        "jellyfin_search",
+        "jellyfin_browse",
+        "jellyfin_get_queue",
+        "jellyfin_play",
+        "jellyfin_playback",
+        "jellyfin_seek",
+        "jellyfin_get_chapters",
+        "jellyfin_volume",
+        "jellyfin_shuffle_repeat",
+        "jellyfin_set_subtitles",
+        "jellyfin_set_audio_track",
+    }
+)
 # Assist's exposure settings are stored under the conversation assistant.
 ASSISTANT = "conversation"
 
@@ -74,11 +94,7 @@ ACTION = llm.ToolAnnotations(
 )
 
 PLAYER_FIELD = probatio.Optional(
-    "player",
-    description=(
-        "Player name, alias, area or entity id. Optional when a single "
-        "player is connected."
-    ),
+    "player", description="Player name, alias, area or entity id"
 )
 SUBTITLES_OFF = "off"
 # Spoken words that mean "no subtitles", accents removed.
@@ -561,9 +577,8 @@ def _track_parameters(what: str) -> dict[Any, Any]:
         probatio.Required(
             "track",
             description=(
-                f"{what}: a track index, or a language or title such as "
-                "'french' or 'français'"
-                + (", or 'off' to remove them" if what == "Subtitles" else "")
+                "Index, language or title"
+                + (", or 'off'" if what == "Subtitles" else "")
             ),
         ): cv.string,
     }
@@ -572,15 +587,14 @@ def _track_parameters(what: str) -> dict[Any, Any]:
 TOOLS: tuple[ToolSpec, ...] = (
     ToolSpec(
         "jellyfin_get_players",
-        "List the Jellyfin players: state, what is playing, position, volume, "
-        "audio and subtitle tracks, last played item and supported features.",
+        "Players: state, playing item, position, volume, tracks, last played.",
         {},
         _get_players,
         READ_ONLY,
     ),
     ToolSpec(
         "jellyfin_search",
-        "Search the Jellyfin library by title. Returns item ids to play.",
+        "Search the library by title; returns item ids to play.",
         {
             probatio.Required("query", description="Words to search for"): cv.string,
             probatio.Optional(
@@ -597,9 +611,8 @@ TOOLS: tuple[ToolSpec, ...] = (
     ),
     ToolSpec(
         "jellyfin_browse",
-        "Browse the Jellyfin library. Without parent_id: the libraries and "
-        "special:resume (continue watching), special:next_up, special:latest. "
-        "latest:LIBRARY_ID lists what was recently added to one library.",
+        "Browse the library. No parent_id: libraries, special:resume, "
+        "special:next_up, special:latest; latest:LIBRARY_ID for one library.",
         {
             probatio.Optional(
                 "parent_id", description="Folder, library or virtual id to open"
@@ -620,8 +633,7 @@ TOOLS: tuple[ToolSpec, ...] = (
     ),
     ToolSpec(
         "jellyfin_play",
-        "Play Jellyfin items (ids from jellyfin_search or jellyfin_browse) on "
-        "a player. A folder, series or album plays its content.",
+        "Play item ids (a series, album or folder plays its content).",
         {
             PLAYER_FIELD: cv.string,
             probatio.Required("item_ids", description="Item ids"): probatio.All(
@@ -630,7 +642,7 @@ TOOLS: tuple[ToolSpec, ...] = (
             probatio.Optional(
                 "enqueue",
                 default="play",
-                description="play now, or add next / add at the end / replace",
+                description="play now, next, add at the end, replace",
             ): probatio.In(["play", "next", "add", "replace"]),
             probatio.Optional("shuffle", default=False): cv.boolean,
             probatio.Optional(
@@ -652,34 +664,28 @@ TOOLS: tuple[ToolSpec, ...] = (
     ),
     ToolSpec(
         "jellyfin_seek",
-        "Move in the playing item: skip forward or back by a duration "
-        "(offset in seconds, negative goes back: 'avance de 30 secondes' is "
-        "offset 30, 'recule de 2 minutes' is offset -120), or jump to a "
-        "position from the start.",
+        "Skip by offset seconds ('recule de 2 minutes' is -120) or jump to "
+        "position seconds from the start.",
         {
             PLAYER_FIELD: cv.string,
-            probatio.Optional(
-                "position", description="Position in seconds from the start"
-            ): probatio.All(probatio.Coerce(float), probatio.Range(min=0)),
-            probatio.Optional(
-                "offset", description="Seconds to skip, negative to go back"
-            ): probatio.Coerce(float),
+            probatio.Optional("position"): probatio.All(
+                probatio.Coerce(float), probatio.Range(min=0)
+            ),
+            probatio.Optional("offset"): probatio.Coerce(float),
         },
         _seek,
         ACTION,
     ),
     ToolSpec(
         "jellyfin_get_chapters",
-        "List the chapters of the playing item (index, name, start in "
-        "seconds) and the current chapter.",
+        "Chapters of the playing item (index, name, start) and the current one.",
         {PLAYER_FIELD: cv.string},
         _chapters,
         READ_ONLY,
     ),
     ToolSpec(
         "jellyfin_seek_chapter",
-        "Go to the next or previous chapter of the playing item, or to a "
-        "chapter by its index from jellyfin_get_chapters.",
+        "Go to the next or previous chapter, or to a chapter index.",
         {
             PLAYER_FIELD: cv.string,
             probatio.Required(
@@ -691,7 +697,7 @@ TOOLS: tuple[ToolSpec, ...] = (
     ),
     ToolSpec(
         "jellyfin_volume",
-        "Set the volume (0-100), mute or unmute, or step it up or down.",
+        "Set the volume level (0-100), mute, or step it up or down.",
         {
             PLAYER_FIELD: cv.string,
             probatio.Optional("level"): probatio.All(
@@ -723,8 +729,7 @@ TOOLS: tuple[ToolSpec, ...] = (
     ),
     ToolSpec(
         "jellyfin_set_audio_track",
-        "Change the audio track of the playing item: its language (dub) or "
-        "its index from jellyfin_get_players (audio_tracks).",
+        "Change the audio track (language or index) of the playing item.",
         _track_parameters("Audio track"),
         _track_tool("audio_track", "set_audio_stream"),
         SETTING,
@@ -840,11 +845,17 @@ class JellyfinTool(llm.Tool):
 class JellyfinLLMAPI(llm.API):
     """LLM API exposing the Jellyfin controls."""
 
+    # Names of the tools to offer; None offers them all.
+    tool_names: frozenset[str] | None = None
     _tools: list[llm.Tool] = dc_field(init=False)
 
     def __post_init__(self) -> None:
         """Build the tools once: they do not depend on the request."""
-        self._tools = [JellyfinTool(spec) for spec in TOOLS]
+        self._tools = [
+            JellyfinTool(spec)
+            for spec in TOOLS
+            if self.tool_names is None or spec.name in self.tool_names
+        ]
 
     @override
     async def async_get_api_instance(
@@ -865,7 +876,25 @@ class JellyfinLLMAPI(llm.API):
 
 @callback
 def async_register_llm_api(hass: HomeAssistant) -> CALLBACK_TYPE:
-    """Register the Jellyfin Control LLM API."""
-    return llm.async_register_api(
-        hass, JellyfinLLMAPI(hass=hass, id=LLM_API_ID, name=LLM_API_NAME)
-    )
+    """Register the full Jellyfin Control LLM API and its voice subset."""
+    unregister = [
+        llm.async_register_api(
+            hass, JellyfinLLMAPI(hass=hass, id=LLM_API_ID, name=LLM_API_NAME)
+        ),
+        llm.async_register_api(
+            hass,
+            JellyfinLLMAPI(
+                hass=hass,
+                id=VOICE_API_ID,
+                name=VOICE_API_NAME,
+                tool_names=VOICE_TOOLS,
+            ),
+        ),
+    ]
+
+    @callback
+    def async_unregister() -> None:
+        for remove in unregister:
+            remove()
+
+    return async_unregister
