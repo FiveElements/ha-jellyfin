@@ -51,6 +51,23 @@ def web_session(device_id: str, **overrides: Any) -> dict[str, Any]:
     return session
 
 
+def client_device(
+    hass: HomeAssistant, entry: MockConfigEntry, device_id: str
+) -> dr.DeviceEntry | None:
+    """Return the registry device of a client of the entry."""
+    wanted = (DOMAIN, f"{SERVER_ID}-{device_id}")
+    return next(
+        (
+            device
+            for device in dr.async_entries_for_config_entry(
+                dr.async_get(hass), entry.entry_id
+            )
+            if wanted in device.identifiers
+        ),
+        None,
+    )
+
+
 @pytest.mark.parametrize("stamp", ["1", "12", "123", "1707867140504"])
 def test_device_id_decodes_whatever_the_padding(stamp: str) -> None:
     device_id = web_device_id(WINDOWS_CHROME, stamp)
@@ -117,9 +134,7 @@ async def test_browsers_are_named_after_their_machine(
     assert await hass.config_entries.async_setup(entry.entry_id)
     await hass.async_block_till_done()
 
-    device = dr.async_get(hass).async_get_device(
-        identifiers={(DOMAIN, f"{SERVER_ID}-{device_id}")}
-    )
+    device = client_device(hass, entry, device_id)
     assert device is not None
     assert device.name == "Chrome · pc-bureau"
     assert device.model == "Jellyfin Web · Chrome 156 · Windows"
@@ -143,8 +158,7 @@ async def test_registry_follows_the_machine_and_keeps_user_names(
     assert await hass.config_entries.async_setup(entry.entry_id)
     await hass.async_block_till_done()
     registry = dr.async_get(hass)
-    identifiers = {(DOMAIN, f"{SERVER_ID}-{device_id}")}
-    device = registry.async_get_device(identifiers=identifiers)
+    device = client_device(hass, entry, device_id)
     # No DNS name: the operating system tells it apart.
     assert device is not None and device.name == "Chrome · Windows"
 
@@ -152,14 +166,14 @@ async def test_registry_follows_the_machine_and_keeps_user_names(
     fake_reverse_dns["192.168.1.30"] = "salon.home.loc"
     entry.runtime_data.coordinator._host_names.clear()
     await refresh(hass, entry)
-    device = registry.async_get_device(identifiers=identifiers)
+    device = client_device(hass, entry, device_id)
     assert device is not None and device.name == "Chrome · salon"
 
     # A name chosen by the user is kept; the version follows the app.
     registry.async_update_device(device.id, name_by_user="Bureau")
     fake.sessions = [web_session(device_id, ApplicationVersion="10.11.3")]
     await refresh(hass, entry)
-    device = registry.async_get_device(identifiers=identifiers)
+    device = client_device(hass, entry, device_id)
     assert device is not None
     assert device.name_by_user == "Bureau"
     assert device.sw_version == "10.11.3"
@@ -168,7 +182,7 @@ async def test_registry_follows_the_machine_and_keeps_user_names(
 async def test_public_address_is_not_looked_up(
     hass: HomeAssistant, fake: FakeJellyfin, loaded: MockConfigEntry
 ) -> None:
-    fake.sessions = [make_session(RemoteEndPoint="203.0.113.7")]
+    fake.sessions = [make_session(RemoteEndPoint="8.8.4.4")]
     with patch(f"{COORDINATOR}._lookup_host_name") as lookup:
         await refresh(hass, loaded)
     lookup.assert_not_called()

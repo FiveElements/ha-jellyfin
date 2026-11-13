@@ -78,10 +78,16 @@ def async_sync_client_devices(coordinator: JellyfinCoordinator) -> None:
     user chose is stored apart (name_by_user) and stays.
     """
     registry = dr.async_get(coordinator.hass)
-    for device_key, session in (coordinator.data or {}).items():
-        device = registry.async_get_device(
-            identifiers={(DOMAIN, client_device_identifier(coordinator, device_key))}
+    devices = {
+        identifier: device
+        for device in dr.async_entries_for_config_entry(
+            registry, coordinator.config_entry.entry_id
         )
+        for registry_domain, identifier in device.identifiers
+        if registry_domain == DOMAIN
+    }
+    for device_key, session in (coordinator.data or {}).items():
+        device = devices.get(client_device_identifier(coordinator, device_key))
         if device is None:
             continue
         details = client_device_details(session, coordinator.host_name(session))
