@@ -202,8 +202,10 @@ class JellyfinControlConfigFlow(ConfigFlow, domain=DOMAIN):
                         return await self._async_finish(auth)
                     errors["base"] = "quick_connect_pending"
         except JellyfinAuthError:
+            # No credentials were typed here: "invalid username or password"
+            # pointed at the wrong thing.
             self._quick_connect = None
-            errors["base"] = "invalid_auth"
+            errors["base"] = "quick_connect_refused"
         except JellyfinError:
             return self.async_abort(reason="cannot_connect")
         code = self._quick_connect.code if self._quick_connect else ""

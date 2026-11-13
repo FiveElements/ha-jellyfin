@@ -2,6 +2,14 @@
 
 - *Cannot connect*: check the URL from the Home Assistant host
   (`curl http://host:8096/System/Info/Public` must return JSON).
+- *The address now reaches another Jellyfin server*: the entry refuses to
+  start rather than send its access token to a server it was not set up
+  with (a new DHCP lease or a proxy change). Reconfigure the entry with the
+  right address.
+- *Library actions fail with "did not match any entities"*: `browse_library`
+  and `search_library` target a media player, and Home Assistant skips
+  unavailable ones. The players become unavailable when polling sessions
+  fails; the log says why.
 - *A client is missing*: only clients that the signed-in user may control are
   listed; sign in as an administrator to see everyone's.
 - *A command does nothing*: the client may not advertise it; download the

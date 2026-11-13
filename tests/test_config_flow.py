@@ -161,7 +161,7 @@ async def test_quick_connect_errors(hass: HomeAssistant, fake: FakeJellyfin) -> 
     )
     fake.set("GET", "/QuickConnect/Connect", (401, None))
     result = await hass.config_entries.flow.async_configure(result["flow_id"], {})
-    assert result["errors"] == {"base": "invalid_auth"}
+    assert result["errors"] == {"base": "quick_connect_refused"}
     fake.set("GET", "/QuickConnect/Enabled", connection_error())
     result = await hass.config_entries.flow.async_configure(result["flow_id"], {})
     assert result["type"] is FlowResultType.ABORT
