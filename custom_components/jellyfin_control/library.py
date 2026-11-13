@@ -218,8 +218,12 @@ class Library:
         if node_id.startswith(PREFIX_LATEST):
             library_id = node_id[len(PREFIX_LATEST) :]
             node = folder_node(node_id, SPECIAL_TITLES[SPECIAL_LATEST])
-            params = {"Limit": 100, "Fields": ITEM_FIELDS, "ParentId": library_id}
-            node.children = _nodes(await self.client.latest_items(params))
+            latest: Params = {
+                "Limit": 100,
+                "Fields": ITEM_FIELDS,
+                "ParentId": library_id,
+            }
+            node.children = _nodes(await self.client.latest_items(latest))
             return node
 
         item = await self.client.item(node_id)
