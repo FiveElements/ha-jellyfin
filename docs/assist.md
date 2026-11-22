@@ -36,7 +36,7 @@ the model lists the players with their aliases, area and state.
 | Tool | Does |
 | --- | --- |
 | `jellyfin_get_players` | State, playing item, position, volume, audio and subtitle tracks, last played item, supported features. |
-| `jellyfin_search` | Search the library (`query`, `media_types`, `limit`). |
+| `jellyfin_search` | Search the library (`query`, `media_types`, `limit`, `player` with several servers). |
 | `jellyfin_browse` | Browse: libraries, `special:resume`, `special:next_up`, `special:latest`, `latest:LIBRARY_ID`, any folder. |
 | `jellyfin_get_queue` | The play queue. |
 | `jellyfin_play` | Play item ids (`enqueue`, `shuffle`, `start_position`). |
@@ -54,7 +54,12 @@ the model lists the players with their aliases, area and state.
 | `jellyfin_send_text` | Type into the focused field. |
 | `jellyfin_display_item` | Open an item's page. |
 | `jellyfin_set_user_data` | Mark played or unplayed, favorite or not. |
-| `jellyfin_scan_library` | Scan the libraries (administrators). |
+
+With several Jellyfin servers, item ids belong to one of them: the library
+tools (`jellyfin_search`, `jellyfin_browse`, `jellyfin_set_user_data`) then
+need the `player` the item is meant for, and answer with an error the model
+can act on when it is left out. Invalid arguments are returned the same way.
+| `jellyfin_scan_library` | Scan the libraries of the servers whose players are exposed (administrators). |
 
 Read-only tools (`jellyfin_get_players`, `jellyfin_search`, `jellyfin_browse`,
 `jellyfin_get_queue`, `jellyfin_get_chapters`) stay available when the MCP

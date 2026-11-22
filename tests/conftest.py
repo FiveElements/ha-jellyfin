@@ -559,7 +559,8 @@ async def loaded(
 async def refresh(hass: HomeAssistant, entry: MockConfigEntry) -> None:
     """Poll the fake server now."""
     await entry.runtime_data.coordinator.async_refresh()
-    await hass.async_block_till_done()
+    # Machine names are looked up in the background.
+    await hass.async_block_till_done(wait_background_tasks=True)
 
 
 def connection_error() -> Exception:

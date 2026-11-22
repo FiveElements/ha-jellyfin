@@ -91,6 +91,9 @@ def async_sync_client_devices(coordinator: JellyfinCoordinator) -> None:
         if device is None:
             continue
         details = client_device_details(session, coordinator.host_name(session))
+        # Same fallback as at creation: a session without DeviceName or
+        # DeviceId used to rename its device to "".
+        details["name"] = details["name"] or device_key
         if any(getattr(device, key) != value for key, value in details.items()):
             registry.async_update_device(
                 device.id,

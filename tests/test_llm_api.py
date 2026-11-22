@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import AsyncIterator
 import copy
 from typing import Any
+from unittest.mock import patch
 
 import pytest
 from pytest_homeassistant.common import MockConfigEntry
@@ -15,6 +16,7 @@ from custom_components.jellyfin_control.llm_api import (
     VOICE_TOOLS,
     Player,
     ToolError,
+    library_player,
     normalize,
     resolve_player,
     track_index,
@@ -327,6 +329,54 @@ async def test_scan_disabled(
     )
     await hass.async_block_till_done()
     assert "administrator" in await error(hass, "jellyfin_scan_library")
+
+
+async def test_invalid_arguments_reach_the_model(
+    hass: HomeAssistant, fake: FakeJellyfin, assist: MockConfigEntry
+) -> None:
+    assert "Invalid arguments" in await error(hass, "jellyfin_volume", level=150)
+    assert "Invalid arguments" in await error(hass, "jellyfin_search")
+
+
+async def test_scan_needs_an_exposed_player(
+    hass: HomeAssistant, fake: FakeJellyfin, assist: MockConfigEntry
+) -> None:
+    async_expose_entity(hass, "conversation", PLAYER, False)
+    assert "No Jellyfin player" in await error(hass, "jellyfin_scan_library")
+    assert not fake.calls_to("POST", "/Library/Refresh")
+
+
+async def test_library_requests_follow_the_named_player(
+    hass: HomeAssistant, fake: FakeJellyfin, assist: MockConfigEntry
+) -> None:
+    await ok(hass, "jellyfin_search", query="matrix", player="living room")
+    await ok(hass, "jellyfin_browse", player="living room")
+    await ok(
+        hass,
+        "jellyfin_set_user_data",
+        item_id="mov1",
+        player="living room",
+        favorite=True,
+    )
+    assert "No player matches" in await error(
+        hass, "jellyfin_search", query="matrix", player="bedroom"
+    )
+
+
+def test_library_player_with_several_servers(hass: HomeAssistant) -> None:
+    def on(entity_id: str, entry_id: str) -> Player:
+        base = player(entity_id, "playing")
+        return Player(base.entity_id, base.name, (), None, None, base.state, entry_id)
+
+    salon, bureau = on("media_player.salon", "a"), on("media_player.bureau", "b")
+    target = "custom_components.jellyfin_control.llm_api.async_players"
+    with patch(target, return_value=[salon, bureau]):
+        # Ids found on one server cannot be played on the other: name it.
+        with pytest.raises(ToolError, match="Several Jellyfin servers"):
+            library_player(hass, {})
+        assert library_player(hass, {"player": "bureau"}) is bureau
+    with patch(target, return_value=[salon, on("media_player.cuisine", "a")]):
+        assert library_player(hass, {}) is salon
 
 
 async def test_player_selection(

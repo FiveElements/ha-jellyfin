@@ -45,6 +45,10 @@ def client(server: FakeJellyfin, url: str = BASE_URL, **kwargs: str) -> Jellyfin
 def test_normalize_url() -> None:
     assert normalize_url(" jellyfin.local:8096/ ") == "http://jellyfin.local:8096"
     assert normalize_url("https://x/jf/") == "https://x/jf"
+    # The base path is encoded once: build_url() appends to it as is.
+    assert normalize_url("nas/my jellyfin") == "http://nas/my%20jellyfin"
+    assert normalize_url("http://nas/my%20jellyfin") == "http://nas/my%20jellyfin"
+    assert normalize_url("http://[::1") == "http://[::1"
 
 
 def test_authorization_header_is_sanitized() -> None:
