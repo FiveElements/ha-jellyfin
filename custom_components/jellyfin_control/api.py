@@ -7,6 +7,7 @@ and raises its own exceptions, which the integration translates.
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
+import contextlib
 from contextlib import AbstractAsyncContextManager
 from dataclasses import dataclass
 import json
@@ -106,6 +107,11 @@ def normalize_url(url: str) -> str:
     url = url.strip()
     if "://" not in url:
         url = f"http://{url}"
+    # Encoded once here: build_url() trusts the base, so a space in
+    # "http://nas/my jellyfin" went out raw and the server answered 400. A URL
+    # yarl refuses is left as typed; the connection test reports it.
+    with contextlib.suppress(ValueError):
+        url = str(URL(url))
     return url.rstrip("/")
 
 

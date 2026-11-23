@@ -95,6 +95,17 @@ async def test_sessions_are_filtered_and_merged(
     assert list(data) == ["dev1"]
     assert data["dev1"]["Id"] == "new"
 
+    # Jellyfin trims trailing zeros of the fraction: compared as text, the
+    # whole second sorted after the later fraction.
+    fake.sessions = [
+        make_session(Id="whole", LastActivityDate="2026-11-13T10:00:00Z"),
+        make_session(Id="later", LastActivityDate="2026-11-13T10:00:00.4Z"),
+        make_session(Id="bad", LastActivityDate="not a date"),
+        make_session(Id="naive", LastActivityDate="2026-11-13T09:00:00"),
+    ]
+    await refresh(hass, loaded)
+    assert loaded.runtime_data.coordinator.data["dev1"]["Id"] == "later"
+
 
 async def test_new_device_is_added(
     hass: HomeAssistant, fake: FakeJellyfin, loaded: MockConfigEntry

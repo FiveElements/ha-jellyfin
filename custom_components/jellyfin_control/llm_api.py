@@ -79,7 +79,8 @@ API_PROMPT = (
     "Control integration) and to search their library. A player is named by "
     "its name, an alias, its area or its entity id; it can be left out when "
     "only one player is connected. Find item ids with jellyfin_search or "
-    "jellyfin_browse before playing them. jellyfin_get_players tells what each "
+    "jellyfin_browse before playing them; with several servers, give those "
+    "the player too. jellyfin_get_players tells what each "
     "player is doing, its audio and subtitle tracks and the last item it played."
 )
 
@@ -147,6 +148,7 @@ class Player:
     area: str | None
     device_id: str | None
     state: State
+    config_entry_id: str | None = None
 
     @property
     def connected(self) -> bool:
@@ -198,6 +200,7 @@ def async_players(hass: HomeAssistant) -> list[Player]:
                 area=area.name if area else None,
                 device_id=entry.device_id,
                 state=state,
+                config_entry_id=entry.config_entry_id,
             )
         )
     return sorted(players, key=lambda p: p.entity_id)
@@ -363,11 +366,24 @@ def target(hass: HomeAssistant, args: dict[str, Any]) -> Player:
     return resolve_player(async_players(hass), args.get("player"))
 
 
-def any_player(hass: HomeAssistant) -> Player:
-    """Return a player to run library requests through (any server works)."""
+def library_player(hass: HomeAssistant, args: dict[str, Any]) -> Player:
+    """Return the player whose server answers a library request.
+
+    Item ids belong to one server: with several, a search run through any
+    player could return ids another server's player then cannot play, so
+    the player must be named unless every exposed one shares a server.
+    """
     players = async_players(hass)
+    if args.get("player"):
+        return resolve_player(players, args["player"])
     if not players:
         raise ToolError("No Jellyfin player is exposed to Assist")
+    if len({p.config_entry_id for p in players}) > 1:
+        choices = "; ".join(p.describe() for p in players)
+        raise ToolError(
+            "Several Jellyfin servers: name the player the item is for. "
+            f"Players: {choices}"
+        )
     return next((p for p in players if p.connected), players[0])
 
 
@@ -380,7 +396,8 @@ async def _get_players(
 async def _search(
     hass: HomeAssistant, args: dict[str, Any], ctx: llm.LLMContext
 ) -> Any:
-    data = {ATTR_ENTITY_ID: any_player(hass).entity_id, "query": args["query"]}
+    data = {ATTR_ENTITY_ID: library_player(hass, args).entity_id}
+    data["query"] = args["query"]
     data["limit"] = args["limit"]
     if args.get("media_types"):
         data["media_types"] = args["media_types"]
@@ -390,7 +407,8 @@ async def _search(
 async def _browse(
     hass: HomeAssistant, args: dict[str, Any], ctx: llm.LLMContext
 ) -> Any:
-    data = {ATTR_ENTITY_ID: any_player(hass).entity_id, "limit": args["limit"]}
+    data = {ATTR_ENTITY_ID: library_player(hass, args).entity_id}
+    data["limit"] = args["limit"]
     if args.get("parent_id"):
         data["parent_id"] = args["parent_id"]
     return await call(hass, ctx, DOMAIN, "browse_library", data, response=True)
@@ -549,7 +567,8 @@ async def _user_data(
 ) -> Any:
     if args.get("played") is None and args.get("favorite") is None:
         raise ToolError("Give played or favorite")
-    data = {ATTR_ENTITY_ID: any_player(hass).entity_id, "item_id": args["item_id"]}
+    data = {ATTR_ENTITY_ID: library_player(hass, args).entity_id}
+    data["item_id"] = args["item_id"]
     for key in ("played", "favorite"):
         if args.get(key) is not None:
             data[key] = args[key]
@@ -557,11 +576,17 @@ async def _user_data(
 
 
 async def _scan(hass: HomeAssistant, args: dict[str, Any], ctx: llm.LLMContext) -> Any:
+    # Only the servers of players exposed to Assist: the model used to scan
+    # every server even when the user exposed none of their players.
+    entries = {p.config_entry_id for p in async_players(hass)}
+    if not entries:
+        raise ToolError("No Jellyfin player is exposed to Assist")
     buttons = [
         entry.entity_id
         for entry in er.async_get(hass).entities.values()
         if entry.platform == DOMAIN
         and entry.domain == BUTTON_DOMAIN
+        and entry.config_entry_id in entries
         and not entry.disabled
     ]
     if not buttons:
@@ -596,6 +621,7 @@ TOOLS: tuple[ToolSpec, ...] = (
         "jellyfin_search",
         "Search the library by title; returns item ids to play.",
         {
+            PLAYER_FIELD: cv.string,
             probatio.Required("query", description="Words to search for"): cv.string,
             probatio.Optional(
                 "media_types",
@@ -614,6 +640,7 @@ TOOLS: tuple[ToolSpec, ...] = (
         "Browse the library. No parent_id: libraries, special:resume, "
         "special:next_up, special:latest; latest:LIBRARY_ID for one library.",
         {
+            PLAYER_FIELD: cv.string,
             probatio.Optional(
                 "parent_id", description="Folder, library or virtual id to open"
             ): cv.string,
@@ -792,6 +819,7 @@ TOOLS: tuple[ToolSpec, ...] = (
         "jellyfin_set_user_data",
         "Mark an item as played or unplayed, or add or remove it from favorites.",
         {
+            PLAYER_FIELD: cv.string,
             probatio.Required("item_id"): cv.string,
             probatio.Optional("played"): cv.boolean,
             probatio.Optional("favorite"): cv.boolean,
@@ -829,9 +857,15 @@ class JellyfinTool(llm.Tool):
         llm_context: llm.LLMContext,
     ) -> llm.ToolResult:
         """Validate the arguments and run the control."""
-        args = self.parameters(tool_input.tool_args)
         try:
+            # Validated inside the try: a bad argument (or one the action's
+            # own schema refuses) is told to the model, which can fix it.
+            args = self.parameters(tool_input.tool_args)
             data = await self._handler(hass, args, llm_context)
+        except probatio.Invalid as err:
+            return llm.ToolResult(
+                data={"error": f"Invalid arguments: {err}"}, error=True
+            )
         except (ToolError, HomeAssistantError) as err:
             # Told to the model, which can pick another player or track.
             return llm.ToolResult(data={"error": str(err)}, error=True)

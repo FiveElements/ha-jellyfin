@@ -2,18 +2,18 @@
 
 from __future__ import annotations
 
-import asyncio
 from dataclasses import dataclass
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 import ipaddress
 import socket
 import time
 from typing import Any, override
 
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
+from homeassistant.util import dt as dt_util
 
 from .api import (
     JellyfinAuthError,
@@ -32,10 +32,8 @@ from .const import (
 
 type JellyfinConfigEntry = ConfigEntry[JellyfinData]
 
-# Machine names are looked up again after an hour (DHCP leases move), and a
-# lookup never holds the poll longer than this.
+# Machine names are looked up again after an hour (DHCP leases move).
 HOST_NAME_TTL = 3600.0
-HOST_NAME_TIMEOUT = 3.0
 
 
 @dataclass(slots=True)
@@ -136,6 +134,9 @@ class JellyfinCoordinator(DataUpdateCoordinator[dict[str, JsonObject]]):
         self._streams: dict[str, list[JsonObject]] = {}
         # address -> (reverse DNS name or None, monotonic expiry)
         self._host_names: dict[str, tuple[str | None, float]] = {}
+        # Addresses being looked up: a lookup stuck in the resolver is not
+        # started again on every poll, piling up executor threads.
+        self._lookups: set[str] = set()
 
     @override
     async def _async_update_data(self) -> dict[str, JsonObject]:
@@ -164,37 +165,45 @@ class JellyfinCoordinator(DataUpdateCoordinator[dict[str, JsonObject]]):
             if current is None or _activity(session) >= _activity(current):
                 result[key] = session
         await self._add_missing_streams(result)
-        await self._resolve_host_names(result.values())
+        self._resolve_host_names(result.values())
         return result
 
-    async def _resolve_host_names(self, sessions: Any) -> None:
-        """Look up the machine name of new local client addresses.
+    @callback
+    def _resolve_host_names(self, sessions: Any) -> None:
+        """Start looking up the machine name of new local client addresses.
 
         Jellyfin only knows a browser as "Chrome"; the name its address has
         in the local DNS is what tells the office PC from the living room.
+        The lookups run in the background: an unreachable resolver used to
+        hold every poll for seconds, longer than the shortest scan interval.
         """
         now = time.monotonic()
-        pending = {
-            address
-            for session in sessions
-            if (address := local_address(session.get("RemoteEndPoint")))
-            and self._host_names.get(address, (None, 0.0))[1] <= now
-        }
-        if not pending:
-            return
-        jobs = {
-            address: self.hass.async_add_executor_job(_lookup_host_name, address)
-            for address in pending
-        }
-        # wait() leaves a slow lookup running instead of cancelling it; it is
-        # simply tried again on a later poll.
-        await asyncio.wait(jobs.values(), timeout=HOST_NAME_TIMEOUT)
-        for address, job in jobs.items():
-            if not job.done():
-                LOGGER.debug("Reverse DNS of %s timed out", address)
-                self._host_names[address] = (None, now + HOST_NAME_TIMEOUT * 20)
-            else:
-                self._host_names[address] = (job.result(), now + HOST_NAME_TTL)
+        for session in sessions:
+            address = local_address(session.get("RemoteEndPoint"))
+            if (
+                address
+                and address not in self._lookups
+                and self._host_names.get(address, (None, 0.0))[1] <= now
+            ):
+                self._lookups.add(address)
+                self.config_entry.async_create_background_task(
+                    self.hass,
+                    self._async_lookup_host_name(address),
+                    f"{DOMAIN} reverse DNS {address}",
+                )
+
+    async def _async_lookup_host_name(self, address: str) -> None:
+        """Look up one address and push a new name to the entities."""
+        try:
+            name = await self.hass.async_add_executor_job(_lookup_host_name, address)
+        finally:
+            self._lookups.discard(address)
+        previous = self._host_names.get(address, (None, 0.0))[0]
+        # A failed refresh keeps the name already known: it used to rename the
+        # device to its operating system, then back once the lookup worked.
+        self._host_names[address] = (name or previous, time.monotonic() + HOST_NAME_TTL)
+        if name and name != previous:
+            self.async_update_listeners()
 
     def host_name(self, session: JsonObject) -> str | None:
         """Return the local DNS name of the machine a session runs on."""
@@ -236,6 +245,15 @@ class JellyfinCoordinator(DataUpdateCoordinator[dict[str, JsonObject]]):
         return (self.data or {}).get(device_key)
 
 
-def _activity(session: dict[str, Any]) -> str:
-    """Sort key: ISO timestamps compare as strings."""
-    return str(session.get("LastActivityDate") or "")
+def _activity(session: dict[str, Any]) -> datetime:
+    """Sort key: when the session was last active.
+
+    Parsed, not compared as text: Jellyfin trims trailing zeros of the
+    fraction, so "10:00:00Z" sorted after the later "10:00:00.4Z".
+    """
+    parsed = dt_util.parse_datetime(str(session.get("LastActivityDate") or ""))
+    if parsed is None:
+        return datetime.min.replace(tzinfo=UTC)
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=UTC)
+    return parsed

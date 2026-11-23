@@ -132,7 +132,7 @@ async def test_browsers_are_named_after_their_machine(
     fake_reverse_dns["192.168.1.30"] = "pc-bureau.home.loc"
     entry.add_to_hass(hass)
     assert await hass.config_entries.async_setup(entry.entry_id)
-    await hass.async_block_till_done()
+    await hass.async_block_till_done(wait_background_tasks=True)
 
     device = client_device(hass, entry, device_id)
     assert device is not None
@@ -193,14 +193,55 @@ async def test_slow_reverse_dns_does_not_hold_the_poll(
 ) -> None:
     coordinator = loaded.runtime_data.coordinator
     fake.sessions = [make_session(RemoteEndPoint="192.168.1.99")]
-    never: asyncio.Future[str | None] = hass.loop.create_future()
-    with (
-        patch(f"{COORDINATOR}.HOST_NAME_TIMEOUT", 0.01),
-        patch.object(hass, "async_add_executor_job", return_value=never),
-    ):
+    pending: asyncio.Future[str | None] = hass.loop.create_future()
+    with patch.object(hass, "async_add_executor_job", return_value=pending) as executor:
         await coordinator.async_refresh()
-    # The poll finished without the name; the lookup is retried later.
+        await coordinator.async_refresh()
+    # The polls finished without the name, and the stuck lookup was not
+    # started a second time.
     assert coordinator.last_update_success
     assert coordinator.host_name(fake.sessions[0]) is None
-    assert "192.168.1.99" in coordinator._host_names
-    never.cancel()
+    lookups = [c for c in executor.call_args_list if c.args[1:] == ("192.168.1.99",)]
+    assert len(lookups) == 1
+    # When it answers, the name reaches the entity without waiting for a poll.
+    pending.set_result("bureau.home.loc")
+    await hass.async_block_till_done(wait_background_tasks=True)
+    assert coordinator.host_name(fake.sessions[0]) == "bureau.home.loc"
+    state = hass.states.get("media_player.living_room")
+    assert state is not None
+    assert state.attributes["host_name"] == "bureau.home.loc"
+
+
+async def test_failed_refresh_keeps_the_known_name(
+    hass: HomeAssistant,
+    fake: FakeJellyfin,
+    entry: MockConfigEntry,
+    fake_reverse_dns: dict[str, str],
+) -> None:
+    device_id = web_device_id(WINDOWS_CHROME)
+    fake.sessions = [web_session(device_id)]
+    fake_reverse_dns["192.168.1.30"] = "pc-bureau.home.loc"
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done(wait_background_tasks=True)
+    # The hourly refresh fails: the device keeps its machine name instead of
+    # falling back to "Chrome · Windows" until the next lookup works.
+    del fake_reverse_dns["192.168.1.30"]
+    coordinator = entry.runtime_data.coordinator
+    coordinator._host_names["192.168.1.30"] = ("pc-bureau.home.loc", 0.0)
+    await refresh(hass, entry)
+    device = client_device(hass, entry, device_id)
+    assert device is not None and device.name == "Chrome · pc-bureau"
+    assert coordinator._host_names["192.168.1.30"][1] > 0
+
+
+async def test_nameless_device_keeps_its_key(
+    hass: HomeAssistant, fake: FakeJellyfin, loaded: MockConfigEntry
+) -> None:
+    session = make_session(Id="anon", DeviceName=None, DeviceId=None)
+    session["NowPlayingItem"] = None
+    fake.sessions = [session]
+    await refresh(hass, loaded)
+    await refresh(hass, loaded)
+    device = client_device(hass, loaded, "anon")
+    assert device is not None and device.name == "anon"
