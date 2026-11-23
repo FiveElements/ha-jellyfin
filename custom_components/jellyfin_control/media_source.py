@@ -22,6 +22,11 @@ from .coordinator import JellyfinConfigEntry
 from .library import Library, LibraryNode
 from .views import signed_image_path, stream_path
 
+# Pinned rather than guessed: Python 3.14.x switched ".mkv" from
+# "video/x-matroska" to the IANA "video/matroska", which Cast and Android
+# players do not all recognise, so the type changed under the same code.
+_PINNED_TYPES = {".mkv": "video/x-matroska"}
+
 
 async def async_get_media_source(hass: HomeAssistant) -> MediaSource:
     """Set up the Jellyfin media source."""
@@ -58,6 +63,9 @@ def mime_type(item: JsonObject, audio_codec: str = DEFAULT_AUDIO_CODEC) -> str |
     names += [f"file.{str(c).split(',')[0]}" for c in containers if c]
     for name in names:
         if name:
+            suffix = str(name).rpartition(".")[2].lower()
+            if pinned := _PINNED_TYPES.get(f".{suffix}"):
+                return pinned
             guessed, _ = mimetypes.guess_type(str(name))
             if guessed:
                 return guessed
